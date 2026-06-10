@@ -52,6 +52,8 @@ export class WalWriter {
   private pending: PendingAppend[] = [];
   private flushing = false;
   private closed = false;
+  /** Set on the first write/sync failure; the writer is fail-stopped after. */
+  private failure: unknown;
   private closePromise: Promise<void> | undefined;
   /** Resolves when the currently in-flight flush (if any) has settled. */
   private flushTail: Promise<void> = Promise.resolve();
@@ -79,11 +81,17 @@ export class WalWriter {
 
   static async open(path: string, mode: FsyncMode): Promise<WalWriter> {
     const fh = await open(path, 'a');
-    const { size } = await fh.stat();
-    return new WalWriter(fh, mode, size);
+    try {
+      const { size } = await fh.stat();
+      return new WalWriter(fh, mode, size);
+    } catch (e) {
+      await fh.close().catch(() => undefined);
+      throw e;
+    }
   }
 
   append(payload: Uint8Array): Promise<void> {
+    if (this.failure !== undefined) return Promise.reject(this.failure);
     if (this.closed) return Promise.reject(new Error('WalWriter closed'));
     return new Promise<void>((resolve, reject) => {
       this.pending.push({ frame: encodeFrame(payload), resolve, reject });
@@ -133,18 +141,33 @@ export class WalWriter {
         const { bytesWritten } = await this.fh.write(buf, written, buf.length - written);
         if (bytesWritten <= 0) throw new Error(`WAL short write: ${written}/${buf.length} bytes`);
         written += bytesWritten;
+        // Track per syscall so bytesWritten matches the real file size even if
+        // a later write in this group fails after partial progress.
+        this.bytesWritten += bytesWritten;
       }
-      this.bytesWritten += buf.length;
       if (this.mode === 'always') {
         await this.fh.sync();
         this.syncCount++;
       }
       for (const g of group) g.resolve();
     } catch (err) {
+      // Fail-stop: a failed write may have left a torn frame on disk. Any
+      // frame written after it would be acked as durable yet unreadable on
+      // recovery (readWal stops at the torn frame), so reject this group,
+      // everything queued behind it, and all future appends. The caller must
+      // recover via reopen + readWal truncation.
       for (const g of group) g.reject(err);
+      this.failStop(err);
     } finally {
       this.flushing = false;
       this.scheduleFlush();
     }
+  }
+
+  private failStop(err: unknown): void {
+    this.failure = err ?? new Error('WalWriter failed');
+    const queued = this.pending;
+    this.pending = [];
+    for (const q of queued) q.reject(this.failure);
   }
 }

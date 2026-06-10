@@ -69,7 +69,7 @@ describe('WalWriter', () => {
     await w2.close();
   });
 
-  it('rejects every pending append when the underlying write fails', async () => {
+  it('rejects every pending append and fail-stops when the underlying write fails', async () => {
     const p = join(dir, 'wal-000001.log');
     const w = await WalWriter.open(p, 'always');
     const spy = vi.spyOn(handleOf(w), 'write').mockRejectedValue(new Error('disk gone'));
@@ -81,10 +81,30 @@ describe('WalWriter', () => {
     expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected', 'rejected']);
     expect(w.bytesWritten).toBe(0);
     spy.mockRestore();
-    await w.append(enc('d'));
+    // Fail-stopped: even though the disk "recovered", later appends must
+    // reject — the failed write may have left a torn frame, and a frame acked
+    // behind it would be unrecoverable (readWal stops at the torn frame).
+    await expect(w.append(enc('d'))).rejects.toThrow('disk gone');
     await w.close();
     const res = await readWal(p);
-    expect(res.payloads.map(dec)).toEqual(['d']);
+    expect(res.payloads).toEqual([]);
+  });
+
+  it('fail-stops after a partial write so nothing is acked behind torn frame bytes', async () => {
+    const p = join(dir, 'wal-000001.log');
+    const w = await WalWriter.open(p, 'always');
+    const fh = handleOf(w);
+    const realWrite = fh.write.bind(fh);
+    vi.spyOn(fh, 'write')
+      .mockImplementationOnce((buf) => realWrite(buf, 0, 3)) // 3 torn bytes land on disk
+      .mockRejectedValueOnce(new Error('ENOSPC'));
+    await expect(w.append(enc('hello'))).rejects.toThrow('ENOSPC');
+    expect(w.bytesWritten).toBe(3); // tracks the real file size, torn bytes included
+    await expect(w.append(enc('after'))).rejects.toThrow('ENOSPC');
+    await w.close();
+    const res = await readWal(p);
+    expect(res.payloads).toEqual([]); // nothing was acked, so nothing is lost
+    expect(res.corruptTail).toBe(true); // recovery sees the torn frame and truncates
   });
 
   it('completes a short write by writing the remainder', async () => {
