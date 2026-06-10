@@ -1,4 +1,5 @@
 export { AtlasError, type AtlasErrorCode } from './errors.js';
+export { GraphStore } from './store.js';
 export {
   validateProps,
   type CommittedBatch,
