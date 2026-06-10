@@ -52,7 +52,10 @@ export function validateProps(props: Props): void {
         for (const item of value) {
           const itemKind = typeof item === 'object' ? 'date' : typeof item;
           if (!isPrimitive(item) || itemKind !== kind)
-            throw new AtlasError('VALIDATION', `property "${key}": arrays must be homogeneous primitives`);
+            throw new AtlasError(
+              'VALIDATION',
+              `property "${key}": arrays must be homogeneous primitives`,
+            );
         }
       }
     } else if (!isPrimitive(value)) {
