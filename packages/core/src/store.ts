@@ -18,6 +18,16 @@ function bucket(adj: Adjacency, nodeId: NodeId, typeId: number): Set<EdgeId> {
   return set;
 }
 
+/** Remove an edge from an adjacency bucket, pruning empty Sets/Maps so churn does not leak memory. */
+function unlink(adj: Adjacency, nodeId: NodeId, typeId: number, edgeId: EdgeId): void {
+  const byType = adj.get(nodeId);
+  const set = byType?.get(typeId);
+  if (!byType || !set) return;
+  set.delete(edgeId);
+  if (set.size === 0) byType.delete(typeId);
+  if (byType.size === 0) adj.delete(nodeId);
+}
+
 export class GraphStore {
   readonly nodes = new Map<NodeId, NodeRecord>();
   readonly edges = new Map<EdgeId, EdgeRecord>();
@@ -29,6 +39,14 @@ export class GraphStore {
     for (const op of batch.ops) this.applyOp(op);
   }
 
+  /**
+   * Apply a single op to the store.
+   *
+   * Prop copies are shallow: array PropertyValues are shared with `op`, and records returned by
+   * getNode/getEdge/outEdges/inEdges are live. Callers must not mutate an op (or its arrays) after
+   * passing it to applyOp, nor mutate returned records. In the real pipeline ops always arrive as
+   * fresh objects (WAL decode / tx builder), so no defensive deep copy is performed here.
+   */
   applyOp(op: Op): void {
     switch (op.op) {
       case 'createNode': {
@@ -70,10 +88,10 @@ export class GraphStore {
         const e = this.edges.get(op.id);
         if (!e) throw new AtlasError('INTERNAL', `edge ${op.id} not found`);
         const typeId = this.types.idOf(e.type);
-        if (typeId !== undefined) {
-          this.outAdj.get(e.from)?.get(typeId)?.delete(op.id);
-          this.inAdj.get(e.to)?.get(typeId)?.delete(op.id);
-        }
+        if (typeId === undefined)
+          throw new AtlasError('INTERNAL', `type ${e.type} not interned for edge ${op.id}`);
+        unlink(this.outAdj, e.from, typeId, op.id);
+        unlink(this.inAdj, e.to, typeId, op.id);
         this.edges.delete(op.id);
         return;
       }
@@ -124,7 +142,7 @@ export class GraphStore {
   }
 
   checkInvariants(): void {
-    const seen = new Set<EdgeId>();
+    const seen = { out: new Set<EdgeId>(), in: new Set<EdgeId>() };
     for (const [adj, dir] of [
       [this.outAdj, 'out'],
       [this.inAdj, 'in'],
@@ -141,16 +159,17 @@ export class GraphStore {
             const endpoint = dir === 'out' ? e.from : e.to;
             if (endpoint !== nodeId || this.types.idOf(e.type) !== typeId)
               throw new AtlasError('INTERNAL', `adjacency mismatch for edge ${edgeId}`);
-            if (dir === 'out') seen.add(edgeId);
+            seen[dir].add(edgeId);
           }
         }
       }
     }
-    if (seen.size !== this.edges.size)
-      throw new AtlasError(
-        'INTERNAL',
-        `adjacency covers ${seen.size} edges, store has ${this.edges.size}`,
-      );
+    for (const dir of ['out', 'in'] as const)
+      if (seen[dir].size !== this.edges.size)
+        throw new AtlasError(
+          'INTERNAL',
+          `${dir}-adjacency covers ${seen[dir].size} edges, store has ${this.edges.size}`,
+        );
     for (const e of this.edges.values())
       if (!this.nodes.has(e.from) || !this.nodes.has(e.to))
         throw new AtlasError('INTERNAL', `edge ${e.id} has dangling endpoint`);
