@@ -52,6 +52,9 @@ export class WalWriter {
   private pending: PendingAppend[] = [];
   private flushing = false;
   private closed = false;
+  private closePromise: Promise<void> | undefined;
+  /** Resolves when the currently in-flight flush (if any) has settled. */
+  private flushTail: Promise<void> = Promise.resolve();
   private timer: NodeJS.Timeout | undefined;
 
   private constructor(
@@ -65,6 +68,9 @@ export class WalWriter {
         void this.fh
           .sync()
           .then(() => this.syncCount++)
+          // Mid-run fsync failures are tolerated in interval mode (it only
+          // promises best-effort durability between barriers); the close-time
+          // sync below is the authoritative barrier and does propagate errors.
           .catch(() => undefined);
       }, mode.intervalMs);
       this.timer.unref();
@@ -81,26 +87,53 @@ export class WalWriter {
     if (this.closed) return Promise.reject(new Error('WalWriter closed'));
     return new Promise<void>((resolve, reject) => {
       this.pending.push({ frame: encodeFrame(payload), resolve, reject });
-      void this.flush();
+      this.scheduleFlush();
     });
   }
 
-  async close(): Promise<void> {
-    while (this.flushing || this.pending.length > 0) await new Promise((r) => setImmediate(r));
-    this.closed = true;
-    if (this.timer) clearInterval(this.timer);
-    await this.fh.sync().catch(() => undefined);
-    await this.fh.close();
+  /** Idempotent: concurrent/repeat calls share one close. Appends issued after
+   * close() begins are rejected; in-flight groups are drained first. */
+  close(): Promise<void> {
+    this.closePromise ??= this.doClose();
+    return this.closePromise;
   }
 
-  private async flush(): Promise<void> {
+  private async doClose(): Promise<void> {
+    this.closed = true;
+    while (this.flushing || this.pending.length > 0) await this.flushTail;
+    if (this.timer) clearInterval(this.timer);
+    try {
+      if (this.mode === 'always') {
+        // Every acked append was already fsynced; this barrier is redundant
+        // belt-and-braces, so a failure here cannot lose acknowledged data.
+        await this.fh.sync().catch(() => undefined);
+      } else {
+        // In interval mode this is the only durability barrier for appends
+        // since the last successful periodic sync — surface failures.
+        await this.fh.sync();
+      }
+    } finally {
+      await this.fh.close();
+    }
+  }
+
+  private scheduleFlush(): void {
     if (this.flushing || this.pending.length === 0) return;
     this.flushing = true;
+    this.flushTail = this.flushGroup();
+  }
+
+  private async flushGroup(): Promise<void> {
     const group = this.pending;
     this.pending = [];
     try {
       const buf = group.length === 1 ? group[0]!.frame : Buffer.concat(group.map((g) => g.frame));
-      await this.fh.write(buf);
+      let written = 0;
+      while (written < buf.length) {
+        const { bytesWritten } = await this.fh.write(buf, written, buf.length - written);
+        if (bytesWritten <= 0) throw new Error(`WAL short write: ${written}/${buf.length} bytes`);
+        written += bytesWritten;
+      }
       this.bytesWritten += buf.length;
       if (this.mode === 'always') {
         await this.fh.sync();
@@ -111,7 +144,7 @@ export class WalWriter {
       for (const g of group) g.reject(err);
     } finally {
       this.flushing = false;
-      void this.flush();
+      this.scheduleFlush();
     }
   }
 }
