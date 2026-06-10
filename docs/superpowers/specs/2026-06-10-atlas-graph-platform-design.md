@@ -19,7 +19,7 @@ The engine is general-purpose by design: future apps (social network analyzer, f
 
 ### Goals (v1)
 
-- Durable, crash-safe embedded graph engine handling **5M nodes / 20M edges on 16 GB RAM**, with benchmark-verified query targets (2-hop traversal over a 10k-node neighborhood: p95 < 50 ms).
+- Durable, crash-safe embedded graph engine with benchmark-verified targets at the **v1 capacity point: 1M nodes / 5M edges within an 8 GB Node heap**. Targets: 2-hop traversal over a 10k-node neighborhood p95 < 50 ms; sustained ≥ 5k write ops/s (group commit, §4.3); full recovery (snapshot load + WAL replay + index rebuild) < 30 s. Larger graphs need compact typed-array layouts — deliberately deferred (§13).
 - AQL query language covering read, write, and algorithm invocation, usable from an interactive console.
 - Multi-user server: accounts, sessions, API tokens, per-database roles, multiple named databases.
 - Live change subscriptions over WebSocket.
@@ -43,6 +43,8 @@ Monorepo managed with **pnpm workspaces + TypeScript project references**. Node.
 apps/web          Angular 20+ Knowledge Graph Explorer (SPA)
    │  (HTTP + WebSocket via @atlas/client)
 packages/client   Typed TS SDK: connect, query, subscribe
+   │
+packages/protocol Shared zod schemas + wire types (consumed by client AND server)
    │
 packages/server   Fastify REST + WS API, auth, multi-DB manager, static hosting
    │
@@ -72,16 +74,16 @@ Tooling: ESLint + Prettier, Vitest (unit/integration), Playwright (e2e), GitHub 
 
 ### 4.3 Durability
 
-- **WAL:** append-only file of binary-framed records: `[u32 length][u32 crc32][payload]`, payload = MessagePack-encoded committed op batch. `fsync` on commit by default; configurable mode `always | interval(ms)` (documented trade-off).
-- **Snapshots:** background job serializes the full graph (MessagePack) to a new snapshot file with a manifest, then truncates the WAL. Triggered when WAL exceeds a threshold (default 64 MB) or on explicit request. Snapshot writing must not block writes: it serializes from a frozen copy-on-write view of committed state.
-- **Recovery:** load latest valid snapshot, replay WAL tail. A torn/corrupt tail record (CRC mismatch) truncates the WAL at the last valid record with a logged warning. Recovery reports exactly what was replayed.
+- **WAL:** append-only file of binary-framed records: `[u32 length][u32 crc32][payload]`, payload = MessagePack-encoded committed op batch. `fsync` on commit by default with **group commit**: batches that arrive while an fsync is in flight are appended together and acknowledged by the next fsync, so write throughput scales past per-commit disk latency. Configurable mode `always | interval(ms)` (documented trade-off).
+- **Snapshots:** background job serializes the full graph (MessagePack) to a new snapshot file with a manifest, then truncates the WAL. Triggered when WAL exceeds a threshold (default 64 MB) or on explicit request. Mechanism: snapshotting briefly **pauses the write queue while encoding the graph to an in-memory buffer** (budget: < 3 s at the v1 capacity point, benchmark-enforced), then resumes writes and flushes the buffer to disk asynchronously. Reads are never blocked. (A zero-pause copy-on-write view is explicitly out of scope for v1 — JS offers no cheap fork-style COW.)
+- **Recovery:** load latest valid snapshot, replay WAL tail. A torn/corrupt tail record (CRC mismatch) truncates the WAL at the last valid record with a logged warning. Indexes are rebuilt from data after replay. Recovery reports exactly what was replayed; total recovery time is part of the benchmark-enforced < 30 s budget (§2).
 - **Backup:** export endpoint (§6.4) for logical backups; file-level backup documented as snapshot-trigger + copy of the data directory.
 
 ### 4.4 Transactions
 
 - API: `db.transact(tx => { tx.createNode(...); tx.createEdge(...); ... })` — atomic all-or-nothing batches.
 - Single-writer: all write batches serialize through one queue. Staged ops apply to committed state only at commit, after validation (constraint checks) and WAL append. Rollback = discard staged ops.
-- Readers always see fully committed state; no torn reads. Long reads/algorithms run against a consistent view (§4.7).
+- Readers always see fully committed state; no torn reads. Long reads and algorithms take a **read lease**: the write queue holds (incoming batches buffer, nothing applies) until the lease releases — bounded as specified in §4.7.
 
 ### 4.5 Indexes and constraints
 
@@ -89,7 +91,8 @@ Tooling: ESLint + Prettier, Vitest (unit/integration), Playwright (e2e), GitHub 
 - **Range index** (in-memory B+-tree) on (label, property) — powers `< > <= >=` and `ORDER BY` on indexed properties.
 - **Full-text index** (inverted, lowercase unicode word tokenizer, prefix support) on configured (label, string property) pairs — powers `CONTAINS` and search-as-you-type in the explorer; falls back to scan when absent.
 - **Unique constraints** per (label, property), enforced at commit.
-- Indexes are rebuilt from data on recovery (not persisted separately in v1).
+- Indexes and constraints are created/dropped via AQL DDL (§5.2) or the embedded API; creating an index over existing data builds it synchronously within a write batch.
+- Indexes are rebuilt from data on recovery (not persisted separately in v1; covered by the §2 recovery budget).
 
 ### 4.6 Schema introspection
 
@@ -97,13 +100,13 @@ The engine maintains observed-schema statistics continuously: labels with counts
 
 ### 4.7 Algorithms
 
-All algorithms run against a consistent committed view and are implemented with **cooperative yielding** (yield to the event loop every N operations) so a long computation never freezes the process; time budgets are enforced at yield points.
+Consistency mechanism (normative): algorithms — and any read pipeline that spans event-loop yields (`stream()`, long AQL queries) — run under a **read lease**. The write queue holds for the duration, giving a point-in-time consistent view at zero copy cost. Algorithms use **cooperative yielding** (yield to the event loop every N operations) so the process stays responsive while the lease is held. The lease is bounded by the algorithm time budget (default 30 s, configurable); on expiry the computation aborts with `TIMEOUT` and buffered writes proceed. Lease wait time is exported as a metric (§6.5). Short non-yielding reads run directly on committed state with no lease.
 
-v1 set: BFS/DFS, Dijkstra and A* shortest paths, all-shortest-paths between two nodes, PageRank, weakly/strongly connected components, Louvain community detection, degree + betweenness centrality, topological sort, cycle detection.
+v1 set: BFS/DFS, Dijkstra and A* shortest paths, all-shortest-paths between two nodes, PageRank, weakly/strongly connected components, Louvain community detection, degree centrality, betweenness centrality (Brandes — exact below a configurable node-count guard, k-source sampled approximation above it), topological sort, cycle detection.
 
 ### 4.8 Change feed
 
-Every commit emits `{ txId, ops: ChangeOp[] }` into a bounded ring buffer with subscription cursors. Server-side WebSocket subscriptions and any embedded consumer attach here. Overflow policy: slow consumers are disconnected with a `resync-required` signal (they re-fetch state).
+Every commit emits `{ txId, ops: ChangeOp[] }` into a bounded ring buffer with subscription cursors. Server-side WebSocket subscriptions and any embedded consumer attach here. Overflow policy: a slow consumer receives a final `{ type: 'resync_required' }` event, then its subscription is closed; `@atlas/client` reacts by re-fetching current state and resubscribing from a fresh cursor automatically (surfaced to the app as one `resync` callback).
 
 ## 5. Query layer (`packages/query`)
 
@@ -126,8 +129,23 @@ Cypher-like text language. v1 clause surface:
 - `WHERE` — comparisons, boolean ops, `CONTAINS` / `STARTS WITH` / `IN`, `EXISTS(prop)`.
 - `RETURN` — projections, `AS` aliases, `DISTINCT`, aggregations `count, collect, sum, avg, min, max`.
 - `ORDER BY … ASC|DESC`, `SKIP`, `LIMIT`.
-- Writes: `CREATE`, `MERGE` (match-or-create), `SET`, `REMOVE`, `DELETE` / `DETACH DELETE`.
-- `CALL algo.<name>(args) YIELD …` — full algorithm set (§4.7) callable from queries.
+- Writes: `CREATE`, `MERGE`, `SET`, `REMOVE`, `DELETE` / `DETACH DELETE`.
+- **MERGE semantics (normative):** Cypher-compatible. The **whole pattern** is matched atomically; if no complete match exists, the entire pattern is created — never partial reuse of some elements plus creation of others. `ON CREATE SET` / `ON MATCH SET` are **in v1 scope**. After a preceding `MATCH`, `MERGE` executes once per incoming binding row. A `MERGE` whose creation path would violate a unique constraint raises `CONSTRAINT_VIOLATION`.
+- **Schema DDL:** `CREATE INDEX ON :Label(prop)`, `CREATE FULLTEXT INDEX ON :Label(prop)`, `CREATE UNIQUE CONSTRAINT ON :Label(prop)`, matching `DROP …`, plus `SHOW INDEXES` / `SHOW CONSTRAINTS`. DDL flows through the normal query endpoint; owner-only (§6.2).
+- `CALL algo.<name>(args) YIELD …` — full algorithm set (§4.7) callable from queries. Pinned v1 signatures:
+
+  | Call | Key params (defaults) | YIELD |
+  |---|---|---|
+  | `algo.shortestPath` | from, to, type?, weightProp? | path, cost |
+  | `algo.allShortestPaths` | from, to, type? | path, cost |
+  | `algo.pagerank` | damping=0.85, iterations=20 | node, score |
+  | `algo.louvain` | maxLevels=10 | node, community |
+  | `algo.components` | mode='weak'\|'strong' | node, component |
+  | `algo.degree` | direction='both' | node, score |
+  | `algo.betweenness` | sampleK? (auto when above guard) | node, score |
+  | `algo.bfs` / `algo.dfs` | from, type?, maxDepth? | node, depth |
+  | `algo.topoSort` | type? | node, order |
+  | `algo.cycles` | type? | cycle (path) |
 - `$parameters` for all literals supplied by applications — injection-safe by construction.
 - `EXPLAIN <query>` returns the logical plan as structured JSON (rendered visually in the explorer).
 
@@ -143,13 +161,27 @@ Every parse and runtime error carries `{ code, message, line, column, snippet }`
 
 ### 6.1 Framework and conventions
 
-Fastify on Node 22+. All request/response bodies validated with zod schemas exported from a shared `@atlas/protocol` module inside the server package and consumed by the client SDK. Errors use RFC 7807 problem-details JSON carrying the `AtlasError` code (§9).
+Fastify on Node 22+. All request/response bodies validated with zod schemas from `packages/protocol` — the shared wire-type package consumed by both server and client SDK, keeping the client fully isomorphic with zero server imports. Errors use RFC 7807 problem-details JSON carrying the `AtlasError` code (§9).
 
 ### 6.2 Auth and authorization
 
 - Accounts: username + argon2id-hashed password. First-run bootstrap admin from env (`ATLAS_ADMIN_USER/PASSWORD`).
 - Web sessions: httpOnly, SameSite=Lax cookies. Programmatic access: bearer API tokens, hashed at rest, scoped to a user.
-- Per-database roles: **owner** (manage roles, delete db), **editor** (read/write data), **viewer** (read-only). Server admins manage users globally.
+- Per-database roles: **owner**, **editor**, **viewer**; plus global **server admins**. Policies (normative): any authenticated user may create a database and automatically becomes its owner; a database may have multiple owners; only owners grant/revoke roles (including owner). Server admins manage users, tokens, and database lifecycle but **cannot read or write database contents** unless explicitly granted a role on that database — enforced and covered by integration tests.
+
+  Permission matrix (v1, normative — `—` means 403 `FORBIDDEN`):
+
+  | Capability | Viewer | Editor | Owner | Server admin |
+  |---|---|---|---|---|
+  | Read queries · `CALL algo.*` · schema view · export | ✓ | ✓ | ✓ | — |
+  | Write queries · node/edge CRUD | — | ✓ | ✓ | — |
+  | Import · seed datasets | — | ✓ | ✓ | — |
+  | Index & constraint DDL | — | — | ✓ | — |
+  | Grant/revoke roles · db settings | — | — | ✓ | — |
+  | Delete database | — | — | ✓ | ✓ |
+  | View per-db audit log | — | — | ✓ | ✓ |
+  | Create databases (creator → owner) | every authenticated user | | | |
+  | Manage users & all tokens · global audit | — | — | — | ✓ |
 
 ### 6.3 Database manager
 
@@ -167,6 +199,8 @@ Each named database = one engine instance with its own data directory, lazy-load
 | Import/export | `POST /db/:name/import` (JSON/CSV), `GET /db/:name/export`, `POST /db/:name/seed/:dataset` |
 | Live | `WS /ws/db/:name` — change-feed subscription with label/type filters |
 | Ops | `GET /healthz`, `GET /metrics` (Prometheus) |
+
+Import format (normative): JSON `{ nodes: [{ tempId, labels, properties }], edges: [{ from, to, type, properties }] }` where `from`/`to` reference `tempId`s or existing engine ids; the response returns the `tempId → assigned id` mapping. CSV: `nodes.csv` / `edges.csv` with typed header conventions (`name:string`, `born:number`), documented in the API reference. Atomicity: imports apply in batched transactions (10k ops per batch); on failure the import stops, reports what was committed plus the first error with row numbers — an `atomic=true` flag forces all-or-nothing for imports that fit in one batch window. Export emits the same JSON format (full fidelity, real ids).
 
 ### 6.5 Safety rails and observability
 
@@ -212,15 +246,15 @@ Keyboard navigation for all non-canvas UI, visible focus states, WCAG AA contras
 
 ## 8. Datasets (`packages/datasets`)
 
-Two curated seed graphs shipped as JSON with loader helpers: **science-history** (~500 nodes: people, concepts, documents, places; WROTE/KNOWS/CITES/INFLUENCED/BORN_IN) and **movies** (~1.2k nodes: films, people, genres; ACTED_IN/DIRECTED/IN_GENRE). Used by demos, docs, e2e tests, and benchmarks.
+Two curated seed graphs shipped as JSON with loader helpers: **science-history** (~500 nodes: people, concepts, documents, places; WROTE/KNOWS/CITES/INFLUENCED/BORN_IN) and **movies** (~1.2k nodes: films, people, genres; ACTED_IN/DIRECTED/IN_GENRE). Also ships a **deterministic synthetic graph generator** (seeded RNG; configurable node/edge counts and degree distribution) that produces the capacity-point graphs used by the benchmark suite. Used by demos, docs, e2e tests, and benchmarks.
 
 ## 9. Error handling
 
-One `AtlasError` hierarchy with stable string codes (`PARSE_ERROR`, `CONSTRAINT_VIOLATION`, `TX_CONFLICT`, `TIMEOUT`, `UNAUTHORIZED`, `WAL_CORRUPT_TAIL`, …) flowing engine → server (problem-details) → SDK (typed exceptions) → UI (console annotations, toasts). No silent failures: every catch either rethrows a typed error or logs at warn+ with context. Recovery and compaction log precise, actionable summaries.
+One `AtlasError` hierarchy with stable string codes (`PARSE_ERROR`, `CONSTRAINT_VIOLATION`, `TIMEOUT`, `UNAUTHORIZED`, `FORBIDDEN`, `WAL_CORRUPT_TAIL`, `RESYNC_REQUIRED`, …; note: no `TX_CONFLICT` — the single-writer model cannot produce write conflicts) flowing engine → server (problem-details) → SDK (typed exceptions) → UI (console annotations, toasts). No silent failures: every catch either rethrows a typed error or logs at warn+ with context. Recovery and compaction log precise, actionable summaries.
 
 ## 10. Testing strategy
 
-- **core:** Vitest unit tests; property-based tests (fast-check) for storage invariants; a **crash-recovery suite** that kills a child process mid-write and asserts clean recovery; algorithm correctness against known small graphs; benchmark suite asserting §2 capacity/latency targets on seeded data.
+- **core:** Vitest unit tests; property-based tests (fast-check) for storage invariants; a **crash-recovery suite** that kills a child process mid-write and asserts clean recovery; algorithm correctness against known small graphs; benchmark suite asserting §2 capacity/latency/recovery targets on synthetic capacity-point graphs from the datasets generator — running in CI's nightly lane from M1 onward, not deferred to the end.
 - **query:** lexer/parser golden tests; execution tests over seed datasets; planner tests (index selection); error-position tests.
 - **server:** API integration tests against a temp data dir (auth, roles, limits, import/export, WS subscriptions).
 - **web:** component tests for stores and critical components; Playwright e2e covering login → create db → seed → explore → query → algorithm overlay.
@@ -233,20 +267,21 @@ Single Docker image (multi-stage build): Node server serving API + built SPA. Vo
 ## 12. Build order (milestones)
 
 1. **M0 Scaffold** — monorepo, tooling, CI, Docker skeleton.
-2. **M1 Engine storage** — graph store, transactions, WAL, snapshots, recovery + crash suite.
-3. **M2 Indexes + fluent API** — exact/range/full-text indexes, constraints, traversals, schema introspection, change feed.
-4. **M3 Algorithms** — full v1 set with yielding + budgets.
-5. **M4 AQL** — lexer → parser → planner → executor, EXPLAIN, errors.
-6. **M5 Server + SDK** — auth, db manager, system catalog, endpoints, WS, limits, metrics.
-7. **M6 Explorer** — Angular app: workspace, console, schema, algorithms, admin, themes, e2e.
-8. **M7 Production hardening** — benchmarks vs targets, docs, seed polish, release v1.
+2. **M1 Engine storage** — graph store, transactions, WAL (group commit), snapshots, recovery + crash suite; synthetic graph generator + benchmark harness (capacity targets tracked from here on).
+3. **M2 Indexes + fluent API** — exact/range/full-text indexes, constraints, traversals, read leases, schema introspection, change feed; science-history dataset + loaders.
+4. **M3 Algorithms** — full v1 set with yielding, leases, budgets.
+5. **M4 AQL** — lexer → parser → planner → executor, DDL, EXPLAIN, errors; movies dataset; AQL reference doc.
+6. **M5 Server + SDK** — protocol package, auth + permission matrix, db manager, system catalog, endpoints, WS, limits, metrics.
+7. **M6 Explorer** — Angular app in testable slices, in order: shell + auth + database picker → workspace canvas → AQL console → schema + algorithms views → admin + theming polish; Playwright e2e lands per slice.
+8. **M7 Production hardening** — benchmark sign-off vs §2 targets, docs, seed polish, release v1.
 
-Each milestone lands with its tests; the app is built last against a fully working platform.
+Each milestone lands with its tests, and each gets **its own implementation plan** — the spec decomposes into per-milestone plans rather than one monolithic plan. The app is built last against a fully working platform.
 
 ## 13. Risks and mitigations
 
-- **JS performance ceiling** (GC pressure on millions of objects): interned labels, numeric ids, Maps over objects, benchmark suite from M1 onward; capacity targets are stated and verified, not aspirational.
-- **Single-writer throughput**: acceptable for the target use (interactive + moderate ingestion); import endpoint batches writes; documented limitation.
+- **JS performance ceiling** (per-object memory overhead, GC pressure): the v1 capacity point (1M nodes / 5M edges) is chosen to fit comfortably in an 8 GB heap with Map/Set layouts; interned labels and numeric ids keep overhead down; the benchmark suite tracks memory from M1. Tens of millions of elements would require typed-array/CSR layouts — deliberately deferred; the storage interface keeps that door open.
+- **Single-writer throughput**: group commit (§4.3) lifts the fsync ceiling; acceptable for the target use (interactive + moderate ingestion); import endpoint batches writes; documented limitation.
+- **Read-lease write stalls**: a long algorithm pauses writes for up to its time budget (default 30 s); bounded by config, surfaced via the lease-wait metric, acceptable for interactive v1 workloads.
 - **Scope creep** (it's a database *and* an app): milestones are strictly ordered; future apps explicitly out of scope.
 - **WAL corruption edge cases**: CRC framing, torn-tail truncation, crash-recovery suite in CI from M1.
 - **Canvas performance on large result sets**: worker-based physics, render caps with paging, benchmark with 10k-node renders.
