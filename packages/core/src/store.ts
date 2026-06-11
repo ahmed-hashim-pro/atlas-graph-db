@@ -107,13 +107,14 @@ export class GraphStore {
         return;
       }
       case 'deleteNode': {
-        if (!this.nodes.has(op.id)) throw new AtlasError('INTERNAL', `node ${op.id} not found`);
+        const n = this.nodes.get(op.id);
+        if (!n) throw new AtlasError('INTERNAL', `node ${op.id} not found`);
         if (this.degree(op.id) > 0)
           throw new AtlasError(
             'INTERNAL',
             `node ${op.id} still has edges (batch not pre-validated?)`,
           );
-        for (const label of this.nodes.get(op.id)!.labels) {
+        for (const label of n.labels) {
           const set = this.byLabel.get(label);
           set?.delete(op.id);
           if (set?.size === 0) this.byLabel.delete(label);
@@ -205,9 +206,14 @@ export class GraphStore {
       }
     }
     let expectedRefs = 0;
-    for (const n of this.nodes.values()) expectedRefs += n.labels.length;
+    // Count distinct labels: byLabel holds each node at most once per label, so a record with
+    // duplicate labels (e.g. ['A', 'A'], reachable via applyOp) must not trip a phantom mismatch.
+    for (const n of this.nodes.values()) expectedRefs += new Set(n.labels).size;
     if (labelRefs !== expectedRefs)
-      throw new AtlasError('INTERNAL', `label index has ${labelRefs} refs, expected ${expectedRefs}`);
+      throw new AtlasError(
+        'INTERNAL',
+        `label index has ${labelRefs} refs, expected ${expectedRefs}`,
+      );
     for (const e of this.edges.values())
       if (!this.nodes.has(e.from) || !this.nodes.has(e.to))
         throw new AtlasError('INTERNAL', `edge ${e.id} has dangling endpoint`);
