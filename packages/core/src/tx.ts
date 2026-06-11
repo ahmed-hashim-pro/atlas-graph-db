@@ -1,8 +1,9 @@
 import { AtlasError } from './errors.js';
 import type { IdAllocator } from './id-allocator.js';
+import { indexDefKey } from './index/registry.js';
 import type { GraphStore } from './store.js';
-import { validateProps } from './types.js';
-import type { EdgeId, NodeId, Op, Props } from './types.js';
+import { validateIndexDef, validateProps } from './types.js';
+import type { EdgeId, IndexDef, NodeId, Op, Props } from './types.js';
 
 interface TxEdge {
   id: EdgeId;
@@ -17,6 +18,8 @@ export class TxBuilder {
   private readonly deletedNodes = new Set<NodeId>();
   private readonly deletedEdges = new Set<EdgeId>();
   private readonly txEdges: TxEdge[] = [];
+  private readonly stagedIndexes = new Set<string>();
+  private readonly droppedIndexes = new Set<string>();
 
   constructor(
     private readonly store: GraphStore,
@@ -83,6 +86,27 @@ export class TxBuilder {
     }
     this.ops.push({ op: 'deleteNode', id });
     this.deletedNodes.add(id);
+  }
+
+  createIndex(def: IndexDef): void {
+    validateIndexDef(def);
+    const key = indexDefKey(def);
+    const exists =
+      (this.store.indexes.has(def) && !this.droppedIndexes.has(key)) || this.stagedIndexes.has(key);
+    if (exists) throw new AtlasError('VALIDATION', `index ${key} already exists`);
+    this.droppedIndexes.delete(key);
+    this.stagedIndexes.add(key);
+    this.ops.push({ op: 'createIndex', def });
+  }
+
+  dropIndex(def: IndexDef): void {
+    const key = indexDefKey(def);
+    const exists =
+      (this.store.indexes.has(def) && !this.droppedIndexes.has(key)) || this.stagedIndexes.has(key);
+    if (!exists) throw new AtlasError('NOT_FOUND', `index ${key} does not exist`);
+    this.stagedIndexes.delete(key);
+    this.droppedIndexes.add(key);
+    this.ops.push({ op: 'dropIndex', def });
   }
 
   build(): Op[] {
