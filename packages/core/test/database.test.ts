@@ -1,8 +1,12 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { encodeBatch } from '../src/codec.js';
+import { AtlasError } from '../src/errors.js';
 import { openDatabase } from '../src/database.js';
+import { scanDataDir, walPath } from '../src/files.js';
+import { WalWriter } from '../src/wal.js';
 
 let dir: string;
 beforeEach(async () => {
@@ -84,5 +88,59 @@ describe('AtlasDatabase', () => {
     await db2.transact((tx) => void tx.createNode(['A'], {}));
     expect(db2.stats().nodeCount).toBe(2);
     await db2.close();
+  });
+
+  it('rejects async transact callbacks before any WAL write or apply', async () => {
+    const db = await openDatabase(dir);
+    const err = await db
+      .transact(async (tx) => {
+        tx.createNode(['Person'], { name: 'racer' });
+        await Promise.resolve();
+        tx.createNode(['Person'], { name: 'phantom' });
+      })
+      .then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+    expect(err).toBeInstanceOf(AtlasError);
+    expect((err as AtlasError).code).toBe('VALIDATION');
+    expect((err as AtlasError).message).toMatch(/synchronous/);
+    expect(db.stats()).toEqual({ nodeCount: 0, edgeCount: 0 });
+    await db.close();
+    const db2 = await openDatabase(dir);
+    expect(db2.stats()).toEqual({ nodeCount: 0, edgeCount: 0 });
+    await db2.close();
+  });
+
+  it('returns the sentinel txId 0 for empty transactions without consuming txIds', async () => {
+    const db = await openDatabase(dir);
+    expect(await db.transact(() => undefined)).toEqual({ txId: 0 });
+    expect(await db.transact((tx) => void tx.createNode(['A'], {}))).toEqual({ txId: 1 });
+    // A no-op after a real commit must not echo that commit's txId.
+    expect(await db.transact(() => undefined)).toEqual({ txId: 0 });
+    expect(await db.transact((tx) => void tx.createNode(['A'], {}))).toEqual({ txId: 2 });
+    await db.close();
+  });
+
+  it('scans WAL/snapshot filenames with more than six digits', async () => {
+    await writeFile(join(dir, 'wal-1000000.log'), Buffer.alloc(0));
+    await writeFile(join(dir, 'wal-000002.log'), Buffer.alloc(0));
+    await writeFile(join(dir, 'snapshot-1000000.bin'), Buffer.alloc(0));
+    await expect(scanDataDir(dir)).resolves.toEqual({
+      snapshotSeq: 1000000,
+      walSeqs: [2, 1000000],
+    });
+  });
+
+  it('rejects WAL replay when txIds are not strictly monotonic', async () => {
+    const wal = await WalWriter.open(walPath(dir, 1), 'always');
+    await wal.append(
+      encodeBatch({ txId: 1, ops: [{ op: 'createNode', id: 1, labels: ['A'], props: {} }] }),
+    );
+    await wal.append(
+      encodeBatch({ txId: 3, ops: [{ op: 'createNode', id: 2, labels: ['A'], props: {} }] }),
+    );
+    await wal.close();
+    await expect(openDatabase(dir)).rejects.toThrow(/expected txId 2 but found 3/);
   });
 });
