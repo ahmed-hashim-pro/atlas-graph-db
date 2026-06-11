@@ -7,7 +7,12 @@ describe('batch codec', () => {
     const batch: CommittedBatch = {
       txId: 7,
       ops: [
-        { op: 'createNode', id: 1, labels: ['Person'], props: { name: 'Ada', when: new Date(123456789) } },
+        {
+          op: 'createNode',
+          id: 1,
+          labels: ['Person'],
+          props: { name: 'Ada', when: new Date(123456789) },
+        },
         { op: 'createEdge', id: 1, type: 'KNOWS', from: 1, to: 1, props: { tags: ['x'] } },
         { op: 'setNodeProps', id: 1, set: { born: 1815 }, remove: ['name'] },
         { op: 'deleteEdge', id: 1 },
