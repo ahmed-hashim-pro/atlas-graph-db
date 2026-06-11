@@ -1,8 +1,10 @@
 import { open, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const WAL_RE = /^wal-(\d{6})\.log$/;
-const SNAP_RE = /^snapshot-(\d{6})\.bin$/;
+// `\d{6,}`: pad() emits 7+ digits once seq exceeds 999999, and those
+// segments must remain scannable on reopen.
+const WAL_RE = /^wal-(\d{6,})\.log$/;
+const SNAP_RE = /^snapshot-(\d{6,})\.bin$/;
 
 function pad(seq: number): string {
   return String(seq).padStart(6, '0');

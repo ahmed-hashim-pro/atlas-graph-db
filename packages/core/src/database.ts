@@ -44,12 +44,22 @@ export class AtlasDatabase {
       const res = await readWal(walPath(dir, seq));
       if (res.corruptTail) {
         if (i < replaySeqs.length - 1)
-          throw new AtlasError('WAL_CORRUPT_TAIL', `corrupt record inside non-final segment ${seq}`);
+          throw new AtlasError(
+            'WAL_CORRUPT_TAIL',
+            `corrupt record inside non-final segment ${seq}`,
+          );
         await truncate(walPath(dir, seq), res.validBytes);
-        console.warn(`[atlas] recovery: truncated corrupt WAL tail of segment ${seq} at byte ${res.validBytes}`);
+        console.warn(
+          `[atlas] recovery: truncated corrupt WAL tail of segment ${seq} at byte ${res.validBytes}`,
+        );
       }
       for (const payload of res.payloads) {
         const batch = decodeBatch(payload);
+        if (batch.txId !== lastTxId + 1)
+          throw new AtlasError(
+            'WAL_CORRUPT_TAIL',
+            `WAL replay: expected txId ${lastTxId + 1} but found ${batch.txId} in segment ${seq}`,
+          );
         store.applyBatch(batch);
         lastTxId = batch.txId;
         for (const op of batch.ops) {
@@ -65,17 +75,39 @@ export class AtlasDatabase {
     return new AtlasDatabase(dir, store, ids, wal, walSeq, lastTxId, options);
   }
 
+  /**
+   * Runs `fn` synchronously against a transaction builder and commits the
+   * staged ops atomically. The callback MUST be synchronous: an async callback
+   * could stage ops after the WAL fsync snapshot, silently diverging the
+   * acknowledged in-memory state from what recovery replays. Thenable returns
+   * are rejected at runtime.
+   *
+   * Returns the committed txId, or the reserved sentinel `{ txId: 0 }` when
+   * the transaction staged no ops (nothing was written or applied).
+   */
   transact(fn: (tx: TxBuilder) => void): Promise<{ txId: number }> {
     return this.queue.run(async () => {
       const tx = new TxBuilder(this.store, this.ids);
-      fn(tx);
-      const ops = tx.build();
-      if (ops.length === 0) return { txId: this.lastTxId };
-      const txId = this.lastTxId + 1;
-      await this.wal.append(encodeBatch({ txId, ops }));
-      this.store.applyBatch({ txId, ops });
-      this.lastTxId = txId;
-      return { txId };
+      const ret = fn(tx) as unknown;
+      if (ret !== undefined && typeof (ret as PromiseLike<unknown>)?.then === 'function') {
+        // Swallow the orphaned thenable's eventual rejection (if any) so the
+        // VALIDATION error below is not shadowed by an unhandled rejection.
+        (ret as PromiseLike<unknown>).then(undefined, () => undefined);
+        throw new AtlasError(
+          'VALIDATION',
+          'transact callback must be synchronous; it returned a thenable',
+        );
+      }
+      // Snapshot the staged ops: build() returns the live array, and the same
+      // frozen batch object must back both the WAL record and the in-memory
+      // apply so they can never diverge.
+      const ops = [...tx.build()];
+      if (ops.length === 0) return { txId: 0 };
+      const batch = { txId: this.lastTxId + 1, ops };
+      await this.wal.append(encodeBatch(batch));
+      this.store.applyBatch(batch);
+      this.lastTxId = batch.txId;
+      return { txId: batch.txId };
     });
   }
 
