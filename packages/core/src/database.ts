@@ -1,8 +1,9 @@
-import { mkdir, truncate } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
 import { decodeBatch, encodeBatch } from './codec.js';
 import { AtlasError } from './errors.js';
-import { scanDataDir, walPath } from './files.js';
+import { fsyncFile, scanDataDir, snapshotPath, walPath } from './files.js';
 import { IdAllocator } from './id-allocator.js';
+import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
 import { TxBuilder } from './tx.js';
 import type { EdgeId, EdgeRecord, NodeId, NodeRecord } from './types.js';
@@ -39,6 +40,24 @@ export class AtlasDatabase {
     let maxNodeId = 0;
     let maxEdgeId = 0;
 
+    if (state.snapshotSeq !== null) {
+      const snap = decodeSnapshot(await readFile(snapshotPath(dir, state.snapshotSeq)));
+      for (const n of snap.nodes)
+        store.applyOp({ op: 'createNode', id: n.id, labels: n.labels, props: n.props });
+      for (const e of snap.edges)
+        store.applyOp({
+          op: 'createEdge',
+          id: e.id,
+          type: e.type,
+          from: e.from,
+          to: e.to,
+          props: e.props,
+        });
+      lastTxId = snap.lastTxId;
+      maxNodeId = snap.nextNodeId - 1;
+      maxEdgeId = snap.nextEdgeId - 1;
+    }
+
     const replaySeqs = state.walSeqs.filter((s) => s > (state.snapshotSeq ?? -1));
     for (const [i, seq] of replaySeqs.entries()) {
       const res = await readWal(walPath(dir, seq));
@@ -52,9 +71,8 @@ export class AtlasDatabase {
       }
       for (const payload of res.payloads) {
         const batch = decodeBatch(payload);
-        // NOTE(Task 16): this check assumes replay starts from txId 0. Once
-        // snapshots land, lastTxId must be seeded from the snapshot header
-        // before replay, or the first post-snapshot batch will spuriously fail.
+        // lastTxId is seeded from the snapshot header above, so this contiguity
+        // check holds both for cold replay (from 0) and post-snapshot replay.
         if (batch.txId !== lastTxId + 1)
           throw new AtlasError(
             'WAL_CORRUPT',
@@ -72,7 +90,46 @@ export class AtlasDatabase {
     const walSeq = replaySeqs.at(-1) ?? (state.snapshotSeq ?? 0) + 1;
     const wal = await WalWriter.open(walPath(dir, walSeq), options.fsync);
     const ids = new IdAllocator(maxNodeId + 1, maxEdgeId + 1);
-    return new AtlasDatabase(dir, store, ids, wal, walSeq, lastTxId, options);
+    const db = new AtlasDatabase(dir, store, ids, wal, walSeq, lastTxId, options);
+    if (state.snapshotSeq !== null) await db.cleanupBefore(state.snapshotSeq);
+    return db;
+  }
+
+  private checkpointing: Promise<void> | null = null;
+
+  checkpoint(): Promise<void> {
+    this.checkpointing ??= this.runCheckpoint().finally(() => {
+      this.checkpointing = null;
+    });
+    return this.checkpointing;
+  }
+
+  private async runCheckpoint(): Promise<void> {
+    // Phase 1 — inside the write queue: rotate WAL, encode state (this is the brief write pause).
+    const { buffer, snapSeq } = await this.queue.run(async () => {
+      const snapSeq = this.walSeq;
+      await this.wal.close();
+      this.walSeq += 1;
+      this.wal = await WalWriter.open(walPath(this.dir, this.walSeq), this.opts.fsync);
+      const buffer = encodeSnapshot(this.store, this.lastTxId, this.ids.peek());
+      return { buffer, snapSeq };
+    });
+    // Phase 2 — outside the queue: persist atomically, then delete covered files.
+    const finalPath = snapshotPath(this.dir, snapSeq);
+    const tmpPath = `${finalPath}.tmp`;
+    await writeFile(tmpPath, buffer);
+    await fsyncFile(tmpPath);
+    await rename(tmpPath, finalPath);
+    await this.cleanupBefore(snapSeq);
+  }
+
+  private async cleanupBefore(snapSeq: number): Promise<void> {
+    const state = await scanDataDir(this.dir);
+    for (const seq of state.walSeqs)
+      if (seq <= snapSeq) await rm(walPath(this.dir, seq), { force: true });
+    if (state.snapshotSeq !== null)
+      for (let seq = state.snapshotSeq - 1; seq >= 0; seq--)
+        await rm(snapshotPath(this.dir, seq), { force: true });
   }
 
   /**
@@ -107,6 +164,8 @@ export class AtlasDatabase {
       await this.wal.append(encodeBatch(batch));
       this.store.applyBatch(batch);
       this.lastTxId = batch.txId;
+      if (this.wal.bytesWritten >= this.opts.snapshotWalBytes && !this.checkpointing)
+        void this.checkpoint().catch((err) => console.warn('[atlas] auto-checkpoint failed', err));
       return { txId: batch.txId };
     });
   }
@@ -136,6 +195,7 @@ export class AtlasDatabase {
   }
 
   async close(): Promise<void> {
+    if (this.checkpointing) await this.checkpointing;
     await this.queue.run(() => undefined);
     await this.wal.close();
   }
