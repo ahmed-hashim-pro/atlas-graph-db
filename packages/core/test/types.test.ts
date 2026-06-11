@@ -22,6 +22,8 @@ describe('validateProps', () => {
     ['undefined', { x: undefined }],
     ['NaN', { x: Number.NaN }],
     ['Infinity', { x: Infinity }],
+    ['invalid Date', { x: new Date('garbage') }],
+    ['invalid Date in array', { x: [new Date(0), new Date(Number.NaN)] }],
     ['mixed array', { x: [1, 'a'] }],
     ['empty key', { '': 1 }],
   ])('rejects %s with VALIDATION', (_name, props) => {

@@ -39,7 +39,7 @@ function isPrimitive(v: unknown): boolean {
     typeof v === 'string' ||
     typeof v === 'boolean' ||
     (typeof v === 'number' && Number.isFinite(v)) ||
-    v instanceof Date
+    (v instanceof Date && !Number.isNaN(v.getTime()))
   );
 }
 
