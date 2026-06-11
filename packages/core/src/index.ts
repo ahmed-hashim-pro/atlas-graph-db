@@ -1,4 +1,5 @@
 export { AtlasError, type AtlasErrorCode } from './errors.js';
+export { AtlasDatabase, openDatabase, type OpenOptions } from './database.js';
 export { GraphStore } from './store.js';
 export { TxBuilder } from './tx.js';
 export {
