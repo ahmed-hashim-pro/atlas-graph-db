@@ -83,6 +83,14 @@ export class BTree {
     return true;
   }
 
+  /**
+   * Iterate (key, id) pairs in order within the given bounds.
+   *
+   * Not snapshot-isolated: the generator walks live leaf nodes, so mutating
+   * the tree (insert/remove) between `next()` calls can skip or duplicate
+   * entries. Callers that iterate across await points must prevent concurrent
+   * writes (e.g. hold a read lease) or materialize the results first.
+   */
   *range(q: RangeQuery = {}): IterableIterator<[ScalarValue, number]> {
     const start = q.gte ?? q.gt;
     let leaf: Leaf;
@@ -104,6 +112,11 @@ export class BTree {
         continue;
       }
       const k = leaf.keys[i]!;
+      // gt-only scans start at the first pair with key >= gt and skip the
+      // boundary run here one entry at a time — O(duplicates of gt) extra
+      // work. If this shows up in profiles, probe findLeaf(gt,
+      // Number.POSITIVE_INFINITY) when only gt is set so descent lands just
+      // past the run, and drop this filter.
       if (q.gt !== undefined && compareValues(k, q.gt) <= 0) {
         i++;
         continue;
@@ -140,7 +153,12 @@ export class BTree {
       this.size++;
       if (n.keys.length <= ORDER) return null;
       const mid = n.keys.length >>> 1;
-      const right: Leaf = { leaf: true, keys: n.keys.splice(mid), ids: n.ids.splice(mid), next: n.next };
+      const right: Leaf = {
+        leaf: true,
+        keys: n.keys.splice(mid),
+        ids: n.ids.splice(mid),
+        next: n.next,
+      };
       n.next = right;
       return { key: right.keys[0]!, id: right.ids[0]!, node: right };
     }
