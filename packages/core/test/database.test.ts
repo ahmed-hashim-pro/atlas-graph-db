@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -80,14 +80,20 @@ describe('AtlasDatabase', () => {
     const db = await openDatabase(dir);
     await db.transact((tx) => void tx.createNode(['A'], {}));
     await db.close();
-    const { appendFile } = await import('node:fs/promises');
-    const { walPath } = await import('../src/files.js');
+    const cleanSize = (await stat(walPath(dir, 1))).size;
     await appendFile(walPath(dir, 1), Buffer.from([9, 9, 9]));
     const db2 = await openDatabase(dir);
     expect(db2.stats().nodeCount).toBe(1);
+    // The garbage tail must be physically truncated, not merely skipped:
+    // otherwise the next commit lands AFTER the torn bytes and is lost on
+    // the following reopen (readWal stops at the torn frame).
+    expect((await stat(walPath(dir, 1))).size).toBe(cleanSize);
     await db2.transact((tx) => void tx.createNode(['A'], {}));
     expect(db2.stats().nodeCount).toBe(2);
     await db2.close();
+    const db3 = await openDatabase(dir);
+    expect(db3.stats().nodeCount).toBe(2);
+    await db3.close();
   });
 
   it('rejects async transact callbacks before any WAL write or apply', async () => {
@@ -122,16 +128,6 @@ describe('AtlasDatabase', () => {
     await db.close();
   });
 
-  it('scans WAL/snapshot filenames with more than six digits', async () => {
-    await writeFile(join(dir, 'wal-1000000.log'), Buffer.alloc(0));
-    await writeFile(join(dir, 'wal-000002.log'), Buffer.alloc(0));
-    await writeFile(join(dir, 'snapshot-1000000.bin'), Buffer.alloc(0));
-    await expect(scanDataDir(dir)).resolves.toEqual({
-      snapshotSeq: 1000000,
-      walSeqs: [2, 1000000],
-    });
-  });
-
   it('rejects WAL replay when txIds are not strictly monotonic', async () => {
     const wal = await WalWriter.open(walPath(dir, 1), 'always');
     await wal.append(
@@ -142,5 +138,17 @@ describe('AtlasDatabase', () => {
     );
     await wal.close();
     await expect(openDatabase(dir)).rejects.toThrow(/expected txId 2 but found 3/);
+  });
+});
+
+describe('scanDataDir', () => {
+  it('scans WAL/snapshot filenames with more than six digits', async () => {
+    await writeFile(join(dir, 'wal-1000000.log'), Buffer.alloc(0));
+    await writeFile(join(dir, 'wal-000002.log'), Buffer.alloc(0));
+    await writeFile(join(dir, 'snapshot-1000000.bin'), Buffer.alloc(0));
+    await expect(scanDataDir(dir)).resolves.toEqual({
+      snapshotSeq: 1000000,
+      walSeqs: [2, 1000000],
+    });
   });
 });

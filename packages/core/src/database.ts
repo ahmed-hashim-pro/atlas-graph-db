@@ -44,10 +44,7 @@ export class AtlasDatabase {
       const res = await readWal(walPath(dir, seq));
       if (res.corruptTail) {
         if (i < replaySeqs.length - 1)
-          throw new AtlasError(
-            'WAL_CORRUPT_TAIL',
-            `corrupt record inside non-final segment ${seq}`,
-          );
+          throw new AtlasError('WAL_CORRUPT', `corrupt record inside non-final segment ${seq}`);
         await truncate(walPath(dir, seq), res.validBytes);
         console.warn(
           `[atlas] recovery: truncated corrupt WAL tail of segment ${seq} at byte ${res.validBytes}`,
@@ -55,9 +52,12 @@ export class AtlasDatabase {
       }
       for (const payload of res.payloads) {
         const batch = decodeBatch(payload);
+        // NOTE(Task 16): this check assumes replay starts from txId 0. Once
+        // snapshots land, lastTxId must be seeded from the snapshot header
+        // before replay, or the first post-snapshot batch will spuriously fail.
         if (batch.txId !== lastTxId + 1)
           throw new AtlasError(
-            'WAL_CORRUPT_TAIL',
+            'WAL_CORRUPT',
             `WAL replay: expected txId ${lastTxId + 1} but found ${batch.txId} in segment ${seq}`,
           );
         store.applyBatch(batch);
@@ -98,9 +98,9 @@ export class AtlasDatabase {
           'transact callback must be synchronous; it returned a thenable',
         );
       }
-      // Snapshot the staged ops: build() returns the live array, and the same
-      // frozen batch object must back both the WAL record and the in-memory
-      // apply so they can never diverge.
+      // Snapshot the staged ops: build() returns the live array, and the
+      // single shared batch object backs both the WAL record and the
+      // in-memory apply so they can never diverge.
       const ops = [...tx.build()];
       if (ops.length === 0) return { txId: 0 };
       const batch = { txId: this.lastTxId + 1, ops };
