@@ -1,4 +1,5 @@
 import { AtlasError } from './errors.js';
+import { IndexRegistry } from './index/registry.js';
 import { Interner } from './interner.js';
 import type { CommittedBatch, EdgeId, EdgeRecord, NodeId, NodeRecord, Op } from './types.js';
 
@@ -34,6 +35,7 @@ export class GraphStore {
   readonly nodes = new Map<NodeId, NodeRecord>();
   readonly edges = new Map<EdgeId, EdgeRecord>();
   readonly types = new Interner();
+  readonly indexes = new IndexRegistry();
   private readonly outAdj: Adjacency = new Map();
   private readonly inAdj: Adjacency = new Map();
   private readonly byLabel = new Map<string, Set<NodeId>>();
@@ -51,6 +53,7 @@ export class GraphStore {
    * fresh objects (WAL decode / tx builder), so no defensive deep copy is performed here.
    */
   applyOp(op: Op): void {
+    this.indexes.beforeApply(op, this);
     switch (op.op) {
       case 'createNode': {
         if (this.nodes.has(op.id)) throw new AtlasError('INTERNAL', `node ${op.id} already exists`);
@@ -122,6 +125,14 @@ export class GraphStore {
         this.outAdj.delete(op.id);
         this.inAdj.delete(op.id);
         this.nodes.delete(op.id);
+        return;
+      }
+      case 'createIndex': {
+        this.indexes.create(op.def, this);
+        return;
+      }
+      case 'dropIndex': {
+        this.indexes.drop(op.def);
         return;
       }
     }

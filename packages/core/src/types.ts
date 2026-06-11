@@ -21,13 +21,32 @@ export interface EdgeRecord {
   props: Props;
 }
 
+export type IndexKind = 'property' | 'fulltext' | 'unique';
+
+export interface IndexDef {
+  kind: IndexKind;
+  label: string;
+  property: string;
+}
+
+const INDEX_KINDS: ReadonlySet<string> = new Set(['property', 'fulltext', 'unique']);
+
+export function validateIndexDef(def: IndexDef): void {
+  if (!INDEX_KINDS.has(def.kind))
+    throw new AtlasError('VALIDATION', `unknown index kind "${def.kind}"`);
+  if (def.label.length === 0 || def.property.length === 0)
+    throw new AtlasError('VALIDATION', 'index label and property must be non-empty');
+}
+
 export type Op =
   | { op: 'createNode'; id: NodeId; labels: string[]; props: Props }
   | { op: 'createEdge'; id: EdgeId; type: string; from: NodeId; to: NodeId; props: Props }
   | { op: 'setNodeProps'; id: NodeId; set: Props; remove: string[] }
   | { op: 'setEdgeProps'; id: EdgeId; set: Props; remove: string[] }
   | { op: 'deleteEdge'; id: EdgeId }
-  | { op: 'deleteNode'; id: NodeId };
+  | { op: 'deleteNode'; id: NodeId }
+  | { op: 'createIndex'; def: IndexDef }
+  | { op: 'dropIndex'; def: IndexDef };
 
 export interface CommittedBatch {
   txId: number;
