@@ -1,4 +1,4 @@
-import { open, readdir } from 'node:fs/promises';
+import { open, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // `\d{6,}`: pad() emits 7+ digits once seq exceeds 999999, and those
@@ -35,6 +35,17 @@ export async function scanDataDir(dir: string): Promise<DataDirState> {
   }
   walSeqs.sort((a, b) => a - b);
   return { snapshotSeq, walSeqs };
+}
+
+/**
+ * Deletes leftover `snapshot-*.bin.tmp` files. A crash between writing the
+ * tmp file and the atomic rename strands it forever: recovery ignores it, but
+ * snapSeq always increments so no later checkpoint would overwrite it.
+ */
+export async function removeStaleSnapshotTmp(dir: string): Promise<void> {
+  for (const name of await readdir(dir)) {
+    if (/^snapshot-\d{6,}\.bin\.tmp$/.test(name)) await rm(join(dir, name), { force: true });
+  }
 }
 
 export async function fsyncFile(path: string): Promise<void> {

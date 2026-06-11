@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import fc from 'fast-check';
 import { describe, it } from 'vitest';
 import { openDatabase } from '../src/database.js';
-import { GraphStore } from '../src/store.js';
 import type { AtlasDatabase } from '../src/database.js';
 
 type Action =
@@ -78,11 +77,11 @@ describe('storage property tests', () => {
           const db = await openDatabase(dir, { snapshotWalBytes: 2048 });
           await applyActions(db, actions);
           const before = db.stats();
-          (db as unknown as { store: GraphStore }).store.checkInvariants();
+          db.checkInvariants();
           await db.close();
 
           const db2 = await openDatabase(dir);
-          (db2 as unknown as { store: GraphStore }).store.checkInvariants();
+          db2.checkInvariants();
           if (JSON.stringify(db2.stats()) !== JSON.stringify(before))
             throw new Error(
               `reopen mismatch: ${JSON.stringify(db2.stats())} vs ${JSON.stringify(before)}`,

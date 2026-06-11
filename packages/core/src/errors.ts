@@ -3,7 +3,11 @@ export type AtlasErrorCode =
   | 'NOT_FOUND'
   | 'CONSTRAINT_VIOLATION'
   | 'TIMEOUT'
-  /** Auto-recoverable: a torn write at the tail of the final WAL segment. */
+  /**
+   * Reserved: torn tail of the final WAL segment. Recovery currently
+   * auto-truncates with a warning instead of throwing; a strict-open mode in
+   * a later milestone may raise this. No code path throws it today.
+   */
   | 'WAL_CORRUPT_TAIL'
   /** Not auto-recoverable: corruption anywhere else (non-final segment, mid-stream txId gap). */
   | 'WAL_CORRUPT'
