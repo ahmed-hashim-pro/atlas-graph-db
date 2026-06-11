@@ -40,6 +40,17 @@ describe('FulltextIndex', () => {
     expect([...ix.search('anal', {})]).toEqual([]); // exact token 'anal' matches nothing
   });
 
+  it('keeps a node indexed while old and new values overlap (update ordering)', () => {
+    // Mutation hooks apply add(new) before remove(old); shared tokens must
+    // survive the remove because their occurrence count is still positive.
+    const ix = new FulltextIndex();
+    ix.add('graph theory', 1);
+    ix.add('graph algorithms', 1);
+    ix.remove('graph theory', 1);
+    expect([...ix.search('graph')]).toEqual([1]);
+    expect([...ix.search('theory')]).toEqual([]);
+  });
+
   it('indexes string arrays, ignores non-strings, and removes cleanly', () => {
     const ix = new FulltextIndex();
     ix.add(['graph theory', 'algebra'], 7);
