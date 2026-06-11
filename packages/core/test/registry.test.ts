@@ -59,7 +59,17 @@ describe('TxBuilder index DDL', () => {
     expect(() => tx.createIndex(def)).toThrowError(AtlasError); // duplicate within tx
     tx.dropIndex(def); // staged create can be dropped
     expect(() => tx.dropIndex(def)).toThrowError(AtlasError); // now missing
-    expect(tx.build().map((o) => o.op)).toEqual(['createIndex', 'dropIndex']);
+    expect(tx.build()).toEqual([]); // create-then-drop of a new index nets to nothing
+  });
+
+  it('build nets DDL into canonical order: data ops, drops, creates', () => {
+    const s = seeded();
+    s.applyOp({ op: 'createIndex', def: { kind: 'property', label: 'Person', property: 'born' } });
+    const tx = new TxBuilder(s, new IdAllocator(10, 10));
+    tx.dropIndex({ kind: 'property', label: 'Person', property: 'born' });
+    tx.createIndex({ kind: 'property', label: 'Person', property: 'born' }); // recreate
+    tx.createNode(['Person'], { born: 1903 });
+    expect(tx.build().map((o) => o.op)).toEqual(['createNode', 'dropIndex', 'createIndex']);
   });
 
   it('rejects malformed defs', () => {

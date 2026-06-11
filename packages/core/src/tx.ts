@@ -18,8 +18,8 @@ export class TxBuilder {
   private readonly deletedNodes = new Set<NodeId>();
   private readonly deletedEdges = new Set<EdgeId>();
   private readonly txEdges: TxEdge[] = [];
-  private readonly stagedIndexes = new Set<string>();
-  private readonly droppedIndexes = new Set<string>();
+  private readonly stagedIndexes = new Map<string, IndexDef>();
+  private readonly droppedIndexes = new Map<string, IndexDef>();
 
   constructor(
     private readonly store: GraphStore,
@@ -95,8 +95,7 @@ export class TxBuilder {
       (this.store.indexes.has(def) && !this.droppedIndexes.has(key)) || this.stagedIndexes.has(key);
     if (exists) throw new AtlasError('VALIDATION', `index ${key} already exists`);
     this.droppedIndexes.delete(key);
-    this.stagedIndexes.add(key);
-    this.ops.push({ op: 'createIndex', def });
+    this.stagedIndexes.set(key, def);
   }
 
   dropIndex(def: IndexDef): void {
@@ -105,12 +104,31 @@ export class TxBuilder {
       (this.store.indexes.has(def) && !this.droppedIndexes.has(key)) || this.stagedIndexes.has(key);
     if (!exists) throw new AtlasError('NOT_FOUND', `index ${key} does not exist`);
     this.stagedIndexes.delete(key);
-    this.droppedIndexes.add(key);
-    this.ops.push({ op: 'dropIndex', def });
+    this.droppedIndexes.set(key, def);
   }
 
+  /**
+   * Returns the batch in canonical order: data ops (in call order), then net
+   * dropIndex ops, then net createIndex ops. DDL on the same def is netted —
+   * create-then-drop within one tx cancels to nothing, drop-then-recreate of
+   * an existing index emits drop followed by create. Because every createIndex
+   * lands after all data ops, its backfill scan during apply sees exactly the
+   * batch's end state — the same state validateBatch checks — so a validated
+   * batch can never throw mid-applyBatch after the WAL append.
+   */
   build(): Op[] {
-    return this.ops;
+    const drops: Op[] = [];
+    const creates: Op[] = [];
+    for (const def of this.droppedIndexes.values()) {
+      // A def created and dropped within this tx never pre-existed: nets to nothing.
+      if (this.store.indexes.has(def)) drops.push({ op: 'dropIndex', def });
+    }
+    for (const def of this.stagedIndexes.values()) {
+      // Pre-existing key staged again means drop-then-recreate: rebuild it.
+      if (this.store.indexes.has(def)) drops.push({ op: 'dropIndex', def });
+      creates.push({ op: 'createIndex', def });
+    }
+    return [...this.ops, ...drops, ...creates];
   }
 
   private requireNode(id: NodeId): void {
