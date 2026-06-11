@@ -170,10 +170,10 @@ export class AtlasDatabase {
           'transact callback must be synchronous; it returned a thenable',
         );
       }
-      // Snapshot the staged ops: build() returns the live array, and the
-      // single shared batch object backs both the WAL record and the
-      // in-memory apply so they can never diverge.
-      const ops = [...tx.build()];
+      // build() returns a fresh canonically-ordered array (data ops, then net
+      // DDL); the single shared batch object backs both the WAL record and
+      // the in-memory apply so they can never diverge.
+      const ops = tx.build();
       if (ops.length === 0) return { txId: 0 };
       this.store.indexes.validateBatch(ops, this.store);
       const batch = { txId: this.lastTxId + 1, ops };

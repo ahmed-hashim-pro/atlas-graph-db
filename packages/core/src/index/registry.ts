@@ -1,6 +1,6 @@
 import { AtlasError } from '../errors.js';
 import type { GraphStore } from '../store.js';
-import type { IndexDef, NodeId, Op } from '../types.js';
+import type { IndexDef, NodeId, Op, Props } from '../types.js';
 import { FulltextIndex } from './fulltext.js';
 import { encodeKey, isScalar, type ScalarValue } from './keys.js';
 import { PropertyIndex, type RangeQuery } from './property-index.js';
@@ -177,20 +177,26 @@ export class IndexRegistry {
    * batch never becomes durable.
    */
   validateBatch(ops: Op[], store: GraphStore): void {
-    const staged: IndexDef[] = [];
-    const droppedKeys = new Set<string>();
+    // Order-aware DDL tracking: the LAST action per def key wins. A unique def
+    // whose final action is 'create' must be validated via the staged full-scan
+    // path even when an index with that key currently exists (drop-then-
+    // recreate rebuilds from the batch's end state); a def whose final action
+    // is 'drop' is exempt. TxBuilder.build() nets DDL to at most one drop
+    // followed by one create per key, but this stays order-aware as
+    // defense-in-depth against hand-built op arrays.
+    const ddl = new Map<string, { action: 'create' | 'drop'; def: IndexDef }>();
     for (const op of ops) {
-      if (op.op === 'createIndex' && op.def.kind === 'unique') staged.push(op.def);
-      if (op.op === 'dropIndex') droppedKeys.add(indexDefKey(op.def));
+      if (op.op === 'createIndex') ddl.set(indexDefKey(op.def), { action: 'create', def: op.def });
+      else if (op.op === 'dropIndex') ddl.set(indexDefKey(op.def), { action: 'drop', def: op.def });
     }
-    const active = [
-      ...this.uniqueEntries().filter((u) => !droppedKeys.has(indexDefKey(u.def))),
-      ...staged.filter((d) => !droppedKeys.has(indexDefKey(d))).map((def) => ({ def, index: undefined })),
-    ];
+    const active: { def: IndexDef; index: PropertyIndex | undefined }[] =
+      this.uniqueEntries().filter((u) => !ddl.has(indexDefKey(u.def)));
+    for (const { action, def } of ddl.values())
+      if (action === 'create' && def.kind === 'unique') active.push({ def, index: undefined });
     if (active.length === 0) return;
 
     // Final state of every node the batch touches: null = deleted.
-    type Sim = { labels: string[]; props: Record<string, unknown> } | null;
+    type Sim = { labels: string[]; props: Props } | null;
     const touched = new Map<NodeId, Sim>();
     const finalOf = (id: NodeId): Sim => {
       if (touched.has(id)) return touched.get(id)!;
@@ -224,8 +230,8 @@ export class IndexRegistry {
       for (const [id, sim] of touched) {
         if (!sim || !sim.labels.includes(def.label)) continue;
         const v = sim.props[def.property];
-        if (v === undefined || !isScalar(v as never)) continue;
-        claim(encodeKey(v as ScalarValue), id);
+        if (v === undefined || !isScalar(v)) continue;
+        claim(encodeKey(v), id);
       }
       if (claims.size === 0 && index !== undefined) continue; // nothing relevant changed
       // 2) Conflicts against committed, untouched nodes.

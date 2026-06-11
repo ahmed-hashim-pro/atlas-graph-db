@@ -41,7 +41,7 @@ export class PropertyIndex {
   }
 
   getExact(value: ScalarValue): ReadonlySet<NodeId> | undefined {
-    return this.exact.get(encodeKey(value));
+    return this.getExactByKey(encodeKey(value));
   }
 
   /** Exact postings by pre-encoded key — used by unique validation. */
