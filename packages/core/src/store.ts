@@ -28,12 +28,15 @@ function unlink(adj: Adjacency, nodeId: NodeId, typeId: number, edgeId: EdgeId):
   if (byType.size === 0) adj.delete(nodeId);
 }
 
+const EMPTY_IDS: ReadonlySet<NodeId> = new Set();
+
 export class GraphStore {
   readonly nodes = new Map<NodeId, NodeRecord>();
   readonly edges = new Map<EdgeId, EdgeRecord>();
   readonly types = new Interner();
   private readonly outAdj: Adjacency = new Map();
   private readonly inAdj: Adjacency = new Map();
+  private readonly byLabel = new Map<string, Set<NodeId>>();
 
   applyBatch(batch: CommittedBatch): void {
     for (const op of batch.ops) this.applyOp(op);
@@ -52,6 +55,14 @@ export class GraphStore {
       case 'createNode': {
         if (this.nodes.has(op.id)) throw new AtlasError('INTERNAL', `node ${op.id} already exists`);
         this.nodes.set(op.id, { id: op.id, labels: [...op.labels], props: { ...op.props } });
+        for (const label of op.labels) {
+          let set = this.byLabel.get(label);
+          if (!set) {
+            set = new Set();
+            this.byLabel.set(label, set);
+          }
+          set.add(op.id);
+        }
         return;
       }
       case 'createEdge': {
@@ -102,6 +113,11 @@ export class GraphStore {
             'INTERNAL',
             `node ${op.id} still has edges (batch not pre-validated?)`,
           );
+        for (const label of this.nodes.get(op.id)!.labels) {
+          const set = this.byLabel.get(label);
+          set?.delete(op.id);
+          if (set?.size === 0) this.byLabel.delete(label);
+        }
         this.outAdj.delete(op.id);
         this.inAdj.delete(op.id);
         this.nodes.delete(op.id);
@@ -134,7 +150,16 @@ export class GraphStore {
   }
 
   *nodesByLabel(label: string): IterableIterator<NodeRecord> {
-    for (const n of this.nodes.values()) if (n.labels.includes(label)) yield n;
+    for (const id of this.byLabel.get(label) ?? []) yield this.nodes.get(id)!;
+  }
+
+  /** Live id set for a label — do not mutate. Internal accelerator for traversals/backfill. */
+  nodeIdsByLabel(label: string): ReadonlySet<NodeId> {
+    return this.byLabel.get(label) ?? EMPTY_IDS;
+  }
+
+  labelCount(label: string): number {
+    return this.byLabel.get(label)?.size ?? 0;
   }
 
   stats(): { nodeCount: number; edgeCount: number } {
@@ -170,6 +195,19 @@ export class GraphStore {
           'INTERNAL',
           `${dir}-adjacency covers ${seen[dir].size} edges, store has ${this.edges.size}`,
         );
+    let labelRefs = 0;
+    for (const [label, set] of this.byLabel) {
+      for (const id of set) {
+        const n = this.nodes.get(id);
+        if (!n || !n.labels.includes(label))
+          throw new AtlasError('INTERNAL', `label index entry ${label}->${id} is stale`);
+        labelRefs++;
+      }
+    }
+    let expectedRefs = 0;
+    for (const n of this.nodes.values()) expectedRefs += n.labels.length;
+    if (labelRefs !== expectedRefs)
+      throw new AtlasError('INTERNAL', `label index has ${labelRefs} refs, expected ${expectedRefs}`);
     for (const e of this.edges.values())
       if (!this.nodes.has(e.from) || !this.nodes.has(e.to))
         throw new AtlasError('INTERNAL', `edge ${e.id} has dangling endpoint`);
