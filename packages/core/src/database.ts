@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
 import { decodeBatch, encodeBatch } from './codec.js';
 import { AtlasError } from './errors.js';
-import { fsyncFile, removeStaleSnapshotTmp, scanDataDir, snapshotPath, walPath } from './files.js';
+import { fsyncDir, fsyncFile, removeStaleSnapshotTmp, scanDataDir, snapshotPath, walPath } from './files.js';
 import { IdAllocator } from './id-allocator.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
@@ -116,6 +116,7 @@ export class AtlasDatabase {
       await this.wal.close();
       this.walSeq += 1;
       this.wal = await WalWriter.open(walPath(this.dir, this.walSeq), this.opts.fsync);
+      await fsyncDir(this.dir);
       const buffer = encodeSnapshot(this.store, this.lastTxId, this.ids.peek());
       return { buffer, snapSeq };
     });
@@ -125,6 +126,7 @@ export class AtlasDatabase {
     await writeFile(tmpPath, buffer);
     await fsyncFile(tmpPath);
     await rename(tmpPath, finalPath);
+    await fsyncDir(this.dir);
     await this.cleanupBefore(snapSeq);
   }
 
@@ -135,6 +137,7 @@ export class AtlasDatabase {
     if (state.snapshotSeq !== null)
       for (let seq = state.snapshotSeq - 1; seq >= 0; seq--)
         await rm(snapshotPath(this.dir, seq), { force: true });
+    await fsyncDir(this.dir);
   }
 
   /**
