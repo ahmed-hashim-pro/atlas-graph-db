@@ -3,8 +3,15 @@ import type { PropertyValue } from '../types.js';
 /** Indexable scalar property values. Arrays are not indexable in v1. */
 export type ScalarValue = string | number | boolean | Date;
 
+/**
+ * True for indexable scalars. Arrays are not indexable in v1, and invalid
+ * Dates (getTime() === NaN) are rejected as defense-in-depth: validateProps
+ * already refuses them at the API boundary, and admitting one here would
+ * break the total order documented on compareValues.
+ */
 export function isScalar(v: PropertyValue): v is ScalarValue {
-  return !Array.isArray(v);
+  if (Array.isArray(v)) return false;
+  return !(v instanceof Date) || !Number.isNaN(v.getTime());
 }
 
 /** Cross-type ordering rank: number < string < boolean < date. */
