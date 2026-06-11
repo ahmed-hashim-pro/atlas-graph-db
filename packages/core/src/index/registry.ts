@@ -169,6 +169,89 @@ export class IndexRegistry {
     return out;
   }
 
+  /**
+   * Pre-commit constraint validation. Simulates the batch's effect on every
+   * touched node, then checks each unique index (existing and staged in this
+   * batch) for conflicts — both within the batch and against committed state.
+   * Throws CONSTRAINT_VIOLATION; called before the WAL append so a violating
+   * batch never becomes durable.
+   */
+  validateBatch(ops: Op[], store: GraphStore): void {
+    const staged: IndexDef[] = [];
+    const droppedKeys = new Set<string>();
+    for (const op of ops) {
+      if (op.op === 'createIndex' && op.def.kind === 'unique') staged.push(op.def);
+      if (op.op === 'dropIndex') droppedKeys.add(indexDefKey(op.def));
+    }
+    const active = [
+      ...this.uniqueEntries().filter((u) => !droppedKeys.has(indexDefKey(u.def))),
+      ...staged.filter((d) => !droppedKeys.has(indexDefKey(d))).map((def) => ({ def, index: undefined })),
+    ];
+    if (active.length === 0) return;
+
+    // Final state of every node the batch touches: null = deleted.
+    type Sim = { labels: string[]; props: Record<string, unknown> } | null;
+    const touched = new Map<NodeId, Sim>();
+    const finalOf = (id: NodeId): Sim => {
+      if (touched.has(id)) return touched.get(id)!;
+      const n = store.getNode(id);
+      return n ? { labels: n.labels, props: { ...n.props } } : null;
+    };
+    for (const op of ops) {
+      if (op.op === 'createNode') touched.set(op.id, { labels: op.labels, props: { ...op.props } });
+      else if (op.op === 'setNodeProps') {
+        const sim = finalOf(op.id);
+        if (sim) {
+          Object.assign(sim.props, op.set);
+          for (const k of op.remove) delete sim.props[k];
+          touched.set(op.id, sim);
+        }
+      } else if (op.op === 'deleteNode') touched.set(op.id, null);
+    }
+
+    for (const { def, index } of active) {
+      const claims = new Map<string, NodeId>();
+      const claim = (key: string, id: NodeId): void => {
+        const prev = claims.get(key);
+        if (prev !== undefined && prev !== id)
+          throw new AtlasError(
+            'CONSTRAINT_VIOLATION',
+            `unique ${def.label}.${def.property}: nodes ${prev} and ${id} share a value`,
+          );
+        claims.set(key, id);
+      };
+      // 1) Claims from touched nodes' final state.
+      for (const [id, sim] of touched) {
+        if (!sim || !sim.labels.includes(def.label)) continue;
+        const v = sim.props[def.property];
+        if (v === undefined || !isScalar(v as never)) continue;
+        claim(encodeKey(v as ScalarValue), id);
+      }
+      if (claims.size === 0 && index !== undefined) continue; // nothing relevant changed
+      // 2) Conflicts against committed, untouched nodes.
+      if (index !== undefined) {
+        for (const [key, id] of claims) {
+          const committed = index.getExactByKey(key);
+          for (const other of committed ?? []) {
+            if (other !== id && !touched.has(other))
+              throw new AtlasError(
+                'CONSTRAINT_VIOLATION',
+                `unique ${def.label}.${def.property}: value already taken by node ${other}`,
+              );
+          }
+        }
+      } else {
+        // Staged constraint: full label scan over committed state (DDL is rare).
+        for (const n of store.nodesByLabel(def.label)) {
+          if (touched.has(n.id)) continue;
+          const v = n.props[def.property];
+          if (v === undefined || !isScalar(v)) continue;
+          claim(encodeKey(v), n.id);
+        }
+      }
+    }
+  }
+
   private scalarIndex(label: string, property: string): PropertyIndex | undefined {
     return (
       this.entries.get(indexDefKey({ kind: 'property', label, property }))?.property ??

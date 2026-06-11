@@ -13,7 +13,7 @@ import { IdAllocator } from './id-allocator.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
 import { TxBuilder } from './tx.js';
-import type { EdgeId, EdgeRecord, NodeId, NodeRecord } from './types.js';
+import type { EdgeId, EdgeRecord, IndexDef, NodeId, NodeRecord } from './types.js';
 import { WalWriter, readWal, type FsyncMode } from './wal.js';
 import { WriteQueue } from './write-queue.js';
 
@@ -175,6 +175,7 @@ export class AtlasDatabase {
       // in-memory apply so they can never diverge.
       const ops = [...tx.build()];
       if (ops.length === 0) return { txId: 0 };
+      this.store.indexes.validateBatch(ops, this.store);
       const batch = { txId: this.lastTxId + 1, ops };
       await this.wal.append(encodeBatch(batch));
       this.store.applyBatch(batch);
@@ -207,6 +208,10 @@ export class AtlasDatabase {
 
   stats(): { nodeCount: number; edgeCount: number } {
     return this.store.stats();
+  }
+
+  listIndexes(): IndexDef[] {
+    return this.store.indexes.defs();
   }
 
   /**
