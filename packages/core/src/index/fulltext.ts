@@ -65,16 +65,16 @@ export class FulltextIndex {
     const tokens = tokenize(query);
     if (tokens.length === 0) return new Set();
     const last = tokens.length - 1;
-    let result: Set<NodeId> | null = null;
-    for (let i = 0; i < tokens.length; i++) {
-      const ids =
-        opts.prefix && i === last
-          ? this.idsForPrefix(tokens[i]!)
-          : new Set(this.postings.get(tokens[i]!)?.keys() ?? []);
-      result = result === null ? ids : new Set([...result].filter((id: NodeId) => ids.has(id)));
-      if (result.size === 0) return result;
+    const idsFor = (i: number): Set<NodeId> =>
+      opts.prefix && i === last
+        ? this.idsForPrefix(tokens[i]!)
+        : new Set(this.postings.get(tokens[i]!)?.keys() ?? []);
+    let result = idsFor(0);
+    for (let i = 1; i < tokens.length && result.size > 0; i++) {
+      const ids = idsFor(i);
+      result = new Set([...result].filter((id: NodeId) => ids.has(id)));
     }
-    return result ?? new Set();
+    return result;
   }
 
   private idsForPrefix(prefix: string): Set<NodeId> {
