@@ -71,7 +71,7 @@ export class FulltextIndex {
         opts.prefix && i === last
           ? this.idsForPrefix(tokens[i]!)
           : new Set(this.postings.get(tokens[i]!)?.keys() ?? []);
-      result = result === null ? ids : new Set([...result].filter((id) => ids.has(id)));
+      result = result === null ? ids : new Set([...result].filter((id: NodeId) => ids.has(id)));
       if (result.size === 0) return result;
     }
     return result ?? new Set();
