@@ -1,7 +1,7 @@
 import { decode, encode } from '@msgpack/msgpack';
 import { AtlasError } from './errors.js';
 import type { GraphStore } from './store.js';
-import type { EdgeRecord, NodeRecord } from './types.js';
+import type { EdgeRecord, IndexDef, NodeRecord } from './types.js';
 
 const MAGIC = Buffer.from('ATLS1');
 
@@ -11,6 +11,8 @@ export interface SnapshotData {
   nextEdgeId: number;
   nodes: NodeRecord[];
   edges: EdgeRecord[];
+  /** Absent in pre-M2 snapshots — treat as []. */
+  indexes?: IndexDef[];
 }
 
 export function encodeSnapshot(
@@ -24,6 +26,7 @@ export function encodeSnapshot(
     nextEdgeId: counters.edgeNext,
     nodes: [...store.nodes.values()],
     edges: [...store.edges.values()],
+    indexes: store.indexes.defs(),
   };
   return Buffer.concat([MAGIC, encode(data)]);
 }
