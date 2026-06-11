@@ -1,7 +1,14 @@
 import { mkdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
 import { decodeBatch, encodeBatch } from './codec.js';
 import { AtlasError } from './errors.js';
-import { fsyncDir, fsyncFile, removeStaleSnapshotTmp, scanDataDir, snapshotPath, walPath } from './files.js';
+import {
+  fsyncDir,
+  fsyncFile,
+  removeStaleSnapshotTmp,
+  scanDataDir,
+  snapshotPath,
+  walPath,
+} from './files.js';
 import { IdAllocator } from './id-allocator.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';

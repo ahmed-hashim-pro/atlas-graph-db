@@ -37,7 +37,7 @@ describe('WAL framing', () => {
   it('stops at a corrupted CRC', async () => {
     const p = join(dir, 'wal-000001.log');
     const frame = encodeFrame(new TextEncoder().encode('data'));
-    frame[frame.length - 1] ^= 0xff;
+    frame[frame.length - 1]! ^= 0xff;
     await writeFile(p, frame);
     const res = await readWal(p);
     expect(res.payloads).toHaveLength(0);

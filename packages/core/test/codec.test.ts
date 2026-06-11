@@ -21,6 +21,8 @@ describe('batch codec', () => {
     };
     const decoded = decodeBatch(encodeBatch(batch));
     expect(decoded).toEqual(batch);
-    expect((decoded.ops[0] as { props: { when: unknown } }).props.when).toBeInstanceOf(Date);
+    expect((decoded.ops[0] as unknown as { props: { when: unknown } }).props.when).toBeInstanceOf(
+      Date,
+    );
   });
 });
