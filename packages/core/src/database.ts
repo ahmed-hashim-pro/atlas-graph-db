@@ -194,6 +194,15 @@ export class AtlasDatabase {
     return this.store.stats();
   }
 
+  /**
+   * Verifies the underlying store's internal invariants, throwing AtlasError
+   * on any violation. Exposed primarily for tests (crash/property suites) so
+   * they need not reach through the private store field.
+   */
+  checkInvariants(): void {
+    this.store.checkInvariants();
+  }
+
   async close(): Promise<void> {
     if (this.checkpointing) await this.checkpointing;
     await this.queue.run(() => undefined);
