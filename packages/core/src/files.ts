@@ -56,3 +56,17 @@ export async function fsyncFile(path: string): Promise<void> {
     await fh.close();
   }
 }
+
+/**
+ * Fsync a directory so renames/creations/deletions of its entries are durable
+ * across power loss, not just process crash. On platforms where directory
+ * fsync is a no-op the call is harmless.
+ */
+export async function fsyncDir(dir: string): Promise<void> {
+  const fh = await open(dir, 'r');
+  try {
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+}
