@@ -226,7 +226,11 @@ export class AtlasDatabase {
   }
 
   /** undefined = no scalar index on (label, property); empty = indexed, no match. */
-  lookupExact(label: string, property: string, value: ScalarValue): ReadonlySet<NodeId> | undefined {
+  lookupExact(
+    label: string,
+    property: string,
+    value: ScalarValue,
+  ): ReadonlySet<NodeId> | undefined {
     return this.store.indexes.lookupExact(label, property, value);
   }
 
