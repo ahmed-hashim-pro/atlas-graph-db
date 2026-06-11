@@ -10,6 +10,8 @@ import {
   walPath,
 } from './files.js';
 import { IdAllocator } from './id-allocator.js';
+import type { ScalarValue } from './index/keys.js';
+import type { RangeQuery } from './index/property-index.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
 import { TxBuilder } from './tx.js';
@@ -64,6 +66,7 @@ export class AtlasDatabase {
       lastTxId = snap.lastTxId;
       maxNodeId = snap.nextNodeId - 1;
       maxEdgeId = snap.nextEdgeId - 1;
+      for (const def of snap.indexes ?? []) store.applyOp({ op: 'createIndex', def });
     }
 
     const replaySeqs = state.walSeqs.filter((s) => s > (state.snapshotSeq ?? -1));
@@ -212,6 +215,34 @@ export class AtlasDatabase {
 
   listIndexes(): IndexDef[] {
     return this.store.indexes.defs();
+  }
+
+  createIndex(def: IndexDef): Promise<{ txId: number }> {
+    return this.transact((tx) => tx.createIndex(def));
+  }
+
+  dropIndex(def: IndexDef): Promise<{ txId: number }> {
+    return this.transact((tx) => tx.dropIndex(def));
+  }
+
+  /** undefined = no scalar index on (label, property); empty = indexed, no match. */
+  lookupExact(label: string, property: string, value: ScalarValue): ReadonlySet<NodeId> | undefined {
+    return this.store.indexes.lookupExact(label, property, value);
+  }
+
+  /** Throws NOT_FOUND if no scalar index exists. */
+  lookupRange(label: string, property: string, q: RangeQuery): IterableIterator<NodeId> {
+    return this.store.indexes.lookupRange(label, property, q);
+  }
+
+  /** undefined = no fulltext index on (label, property). */
+  searchText(
+    label: string,
+    property: string,
+    query: string,
+    opts: { prefix?: boolean } = {},
+  ): Set<NodeId> | undefined {
+    return this.store.indexes.searchText(label, property, query, opts);
   }
 
   /**
