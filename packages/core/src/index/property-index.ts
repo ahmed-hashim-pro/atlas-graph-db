@@ -44,6 +44,11 @@ export class PropertyIndex {
     return this.exact.get(encodeKey(value));
   }
 
+  /** Exact postings by pre-encoded key — used by unique validation. */
+  getExactByKey(key: string): ReadonlySet<NodeId> | undefined {
+    return this.exact.get(key);
+  }
+
   *getRange(q: RangeQuery): IterableIterator<NodeId> {
     for (const [, id] of this.tree.range(q)) yield id;
   }
