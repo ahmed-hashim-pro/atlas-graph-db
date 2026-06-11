@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
 import { decodeBatch, encodeBatch } from './codec.js';
 import { AtlasError } from './errors.js';
-import { fsyncFile, scanDataDir, snapshotPath, walPath } from './files.js';
+import { fsyncFile, removeStaleSnapshotTmp, scanDataDir, snapshotPath, walPath } from './files.js';
 import { IdAllocator } from './id-allocator.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
@@ -34,6 +34,7 @@ export class AtlasDatabase {
       snapshotWalBytes: opts.snapshotWalBytes ?? 64 * 1024 * 1024,
     };
     await mkdir(dir, { recursive: true });
+    await removeStaleSnapshotTmp(dir);
     const state = await scanDataDir(dir);
     const store = new GraphStore();
     let lastTxId = 0;
@@ -96,8 +97,12 @@ export class AtlasDatabase {
   }
 
   private checkpointing: Promise<void> | null = null;
+  private closed = false;
 
   checkpoint(): Promise<void> {
+    // No-op once close() has begun: a checkpoint started after the close
+    // drain would open a fresh WalWriter that nothing ever closes.
+    if (this.closed) return Promise.resolve();
     this.checkpointing ??= this.runCheckpoint().finally(() => {
       this.checkpointing = null;
     });
@@ -204,9 +209,17 @@ export class AtlasDatabase {
   }
 
   async close(): Promise<void> {
-    if (this.checkpointing) await this.checkpointing;
+    this.closed = true;
+    // In-flight transacts drain first; any checkpoint they (or callers)
+    // started before `closed` was set must finish before the WAL closes.
+    await this.drainCheckpoints();
     await this.queue.run(() => undefined);
+    await this.drainCheckpoints();
     await this.wal.close();
+  }
+
+  private async drainCheckpoints(): Promise<void> {
+    for (let cp = this.checkpointing; cp !== null; cp = this.checkpointing) await cp;
   }
 }
 

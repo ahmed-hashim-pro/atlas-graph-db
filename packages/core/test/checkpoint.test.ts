@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -13,6 +13,17 @@ afterEach(async () => {
 });
 
 describe('checkpointing', () => {
+  it('removes stale snapshot .tmp files on open (crash between write and rename)', async () => {
+    const db = await openDatabase(dir);
+    await db.transact((tx) => void tx.createNode(['A'], {}));
+    await db.close();
+    await writeFile(join(dir, 'snapshot-000007.bin.tmp'), 'stranded by a simulated crash');
+    const db2 = await openDatabase(dir);
+    expect(await readdir(dir)).not.toContain('snapshot-000007.bin.tmp');
+    expect(db2.stats().nodeCount).toBe(1);
+    await db2.close();
+  });
+
   it('writes a snapshot, rotates the WAL, and deletes covered segments', async () => {
     const db = await openDatabase(dir);
     await db.transact((tx) => void tx.createNode(['A'], { n: 1 }));
