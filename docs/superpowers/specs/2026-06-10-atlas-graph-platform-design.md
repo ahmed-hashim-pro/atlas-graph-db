@@ -288,4 +288,4 @@ Each milestone lands with its tests, and each gets **its own implementation plan
 
 ## 14. Resolved decisions log
 
-TypeScript end-to-end · embedded lib + server (not server-only, not on-disk pages) · fluent API + AQL (not either alone) · self-hosted multi-user (not single-user, not SaaS) · layered monorepo engine-first (not app-first, not split repos) · Angular for the web app (user decision, replacing the initial React proposal) · all three visual themes ship, Midnight Observatory default.
+TypeScript end-to-end · embedded lib + server (not server-only, not on-disk pages) · fluent API + AQL (not either alone) · self-hosted multi-user (not single-user, not SaaS) · layered monorepo engine-first (not app-first, not split repos) · Angular for the web app (user decision, replacing the initial React proposal) · all three visual themes ship, Midnight Observatory default · curated datasets are generated deterministically in code (curated core + seeded expansion), not shipped as static JSON files as §8 originally phrased it (M2 decision; loaders unchanged).

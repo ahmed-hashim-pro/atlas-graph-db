@@ -143,6 +143,12 @@ abstract class BaseTraversal<T extends { id: number; props: Props }> {
    * Async terminal: yields every result under a read lease (point-in-time
    * view — concurrent writes buffer until the stream finishes or its budget
    * expires), surrendering the event loop every STREAM_YIELD_EVERY items.
+   *
+   * Exit via for-await completion, `break`, or `return` — all release the
+   * lease immediately. Abandoning the iterator object without closing it
+   * (e.g. after a manual next()) skips the generator's finally, so the lease
+   * holds writes until the budget expires; db.close() during such a hold
+   * also waits out the budget.
    */
   async *stream(opts: { budgetMs?: number } = {}): AsyncIterableIterator<T> {
     const lease = await this.leases.acquireReadLease(opts);
