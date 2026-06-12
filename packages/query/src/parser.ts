@@ -1,5 +1,20 @@
-import { AGGREGATES, SCALAR_FUNCS, type Expr, type Pos } from './ast.js';
+import {
+  AGGREGATES,
+  MAX_VAR_HOPS,
+  MAX_VAR_HOPS_DEFAULT,
+  SCALAR_FUNCS,
+  walkExpr,
+  type EdgePattern,
+  type Expr,
+  type NodePattern,
+  type ParsedQuery,
+  type PathPattern,
+  type Pos,
+  type ReadQuery,
+  type ReturnItem,
+} from './ast.js';
 import { AqlError } from './errors.js';
+import { lex } from './lexer.js';
 import type { Token } from './lexer.js';
 
 export class TokenStream {
@@ -212,3 +227,188 @@ function parsePrimary(ts: TokenStream): Expr {
 }
 
 export { AGGREGATES, SCALAR_FUNCS };
+
+export function parseQuery(source: string): ParsedQuery {
+  const ts = new TokenStream(lex(source), source);
+  const explain = ts.takeKeyword('EXPLAIN');
+  const query = parseReadQuery(ts);
+  const trailing = ts.peek();
+  if (trailing.type !== 'eof') ts.fail('expected end of query');
+  validateQuery(query, source);
+  return { explain, query };
+}
+
+function parseReadQuery(ts: TokenStream): ReadQuery {
+  ts.expectKeyword('MATCH');
+  const patterns: PathPattern[] = [parsePathPattern(ts)];
+  while (ts.takePunct(',')) patterns.push(parsePathPattern(ts));
+  const where = ts.takeKeyword('WHERE') ? parseExpression(ts) : undefined;
+  ts.expectKeyword('RETURN');
+  const distinct = ts.takeKeyword('DISTINCT');
+  const items: ReturnItem[] = [];
+  do {
+    const start = ts.peek();
+    const expr = parseExpression(ts);
+    const alias = ts.takeKeyword('AS') ? ts.expectIdent('alias').value : undefined;
+    items.push({ expr, alias, pos: pos(start) });
+  } while (ts.takePunct(','));
+  const orderBy: { expr: Expr; desc: boolean }[] = [];
+  if (ts.takeKeyword('ORDER')) {
+    ts.expectKeyword('BY');
+    do {
+      const expr = parseExpression(ts);
+      const desc = ts.takeKeyword('DESC') ? true : (ts.takeKeyword('ASC'), false);
+      orderBy.push({ expr, desc });
+    } while (ts.takePunct(','));
+  }
+  const skip = ts.takeKeyword('SKIP') ? parseCountExpr(ts) : undefined;
+  const limit = ts.takeKeyword('LIMIT') ? parseCountExpr(ts) : undefined;
+  return { patterns, where, distinct, items, orderBy, skip, limit };
+}
+
+/** SKIP/LIMIT accept only a non-negative integer literal or a parameter. */
+function parseCountExpr(ts: TokenStream): Expr {
+  const t = ts.peek();
+  if (t.type === 'number' || t.type === 'param') return parsePrimary(ts);
+  ts.fail('SKIP/LIMIT expect a number or parameter');
+}
+
+function parsePathPattern(ts: TokenStream): PathPattern {
+  const nodes: NodePattern[] = [parseNodePattern(ts)];
+  const edges: EdgePattern[] = [];
+  for (;;) {
+    if (ts.atPunct('-') || ts.atPunct('<-')) {
+      edges.push(parseEdgePattern(ts));
+      nodes.push(parseNodePattern(ts));
+    } else {
+      break;
+    }
+  }
+  return { nodes, edges };
+}
+
+function parseNodePattern(ts: TokenStream): NodePattern {
+  const open = ts.expectPunct('(');
+  const node: NodePattern = { labels: [], props: [], pos: pos(open) };
+  if (ts.peek().type === 'ident' && !ts.atPunct(':')) node.variable = ts.next().value;
+  while (ts.takePunct(':')) node.labels.push(ts.expectIdent('label').value);
+  if (ts.takePunct('{')) {
+    do {
+      const prop = ts.expectIdent('property name');
+      ts.expectPunct(':');
+      node.props.push({ property: prop.value, value: parseExpression(ts) });
+    } while (ts.takePunct(','));
+    ts.expectPunct('}');
+  }
+  ts.expectPunct(')');
+  return node;
+}
+
+function parseEdgePattern(ts: TokenStream): EdgePattern {
+  const start = ts.peek();
+  let direction: 'out' | 'in' | 'both';
+  const incoming = ts.takePunct('<-');
+  if (!incoming) ts.expectPunct('-');
+  ts.expectPunct('[');
+  const edge: EdgePattern = { types: [], direction: 'both', pos: pos(start) };
+  if (ts.peek().type === 'ident' && !ts.atPunct(':')) edge.variable = ts.next().value;
+  if (ts.takePunct(':')) {
+    edge.types.push(ts.expectIdent('edge type').value);
+    while (ts.takePunct('|')) edge.types.push(ts.expectIdent('edge type').value);
+  }
+  if (ts.takePunct('*')) {
+    const t = ts.peek();
+    if (t.type === 'number') {
+      ts.next();
+      const min = Number(t.value);
+      if (ts.takePunct('..')) {
+        const maxTok = ts.peek();
+        if (maxTok.type !== 'number') ts.fail('expected upper hop bound');
+        ts.next();
+        edge.varLength = { min, max: Number(maxTok.value) };
+      } else {
+        edge.varLength = { min, max: min };
+      }
+    } else {
+      edge.varLength = { min: 1, max: MAX_VAR_HOPS_DEFAULT };
+    }
+  }
+  ts.expectPunct(']');
+  if (incoming) {
+    ts.expectPunct('-');
+    direction = 'in';
+  } else if (ts.takePunct('->')) {
+    direction = 'out';
+  } else {
+    ts.expectPunct('-');
+    direction = 'both';
+  }
+  edge.direction = direction;
+  return edge;
+}
+
+function validateQuery(q: ReadQuery, source: string): void {
+  const fail = (msg: string, p: Pos): never => {
+    throw new AqlError('SEMANTIC_ERROR', msg, p, source);
+  };
+  const nodeVars = new Set<string>();
+  const edgeVars = new Set<string>();
+  for (const pat of q.patterns) {
+    for (const n of pat.nodes) {
+      if (n.variable !== undefined) {
+        if (edgeVars.has(n.variable))
+          fail(`variable "${n.variable}" is already bound to an edge`, n.pos);
+        nodeVars.add(n.variable);
+      }
+    }
+    for (const e of pat.edges) {
+      if (e.varLength) {
+        if (e.variable !== undefined)
+          fail('variable-length edges cannot be bound to a variable in v1', e.pos);
+        if (e.varLength.min < 1 || e.varLength.min > e.varLength.max)
+          fail(`invalid hop range *${e.varLength.min}..${e.varLength.max}`, e.pos);
+        if (e.varLength.max > MAX_VAR_HOPS)
+          fail(`hop bound ${e.varLength.max} exceeds the maximum of ${MAX_VAR_HOPS}`, e.pos);
+      }
+      if (e.variable !== undefined) {
+        if (nodeVars.has(e.variable) || edgeVars.has(e.variable))
+          fail(`variable "${e.variable}" is already bound`, e.pos);
+        edgeVars.add(e.variable);
+      }
+    }
+  }
+  const known = new Set([...nodeVars, ...edgeVars]);
+  const aliases = new Set(q.items.map((i) => i.alias).filter((a): a is string => a !== undefined));
+  const checkRefs = (e: Expr, allowAlias: boolean, allowAggregate: boolean): void => {
+    walkExpr(e, (x) => {
+      if (x.kind === 'variable' && !known.has(x.name) && !(allowAlias && aliases.has(x.name)))
+        fail(`unknown variable "${x.name}"`, x.pos);
+      if ((x.kind === 'prop' || x.kind === 'exists') && !known.has(x.target))
+        fail(`unknown variable "${x.target}"`, x.pos);
+      if (x.kind === 'call') {
+        if (!AGGREGATES.has(x.func) && !SCALAR_FUNCS.has(x.func))
+          fail(`unknown function "${x.func}"`, x.pos);
+        if (AGGREGATES.has(x.func) && !allowAggregate)
+          fail(`aggregate function "${x.func}" is not allowed here`, x.pos);
+        if (x.arg !== '*' && x.kind === 'call') {
+          // no nested aggregates
+          walkExpr(x.arg, (inner) => {
+            if (inner.kind === 'call' && AGGREGATES.has(inner.func))
+              fail('aggregate functions cannot be nested', inner.pos);
+          });
+        }
+      }
+    });
+  };
+  // Inline pattern props may reference params/literals only (no variables).
+  for (const pat of q.patterns)
+    for (const n of pat.nodes)
+      for (const p of n.props)
+        walkExpr(p.value, (x) => {
+          if (x.kind === 'variable' || x.kind === 'prop' || x.kind === 'call')
+            fail('inline property values must be literals or parameters', x.pos);
+        });
+  if (q.where) checkRefs(q.where, false, false);
+  for (const item of q.items) checkRefs(item.expr, false, true);
+  for (const o of q.orderBy) checkRefs(o.expr, true, true);
+}
