@@ -6,22 +6,22 @@ import { openDatabase, type AtlasDatabase } from '../src/database.js';
 
 let dir: string;
 let db: AtlasDatabase;
-let ids: Record<string, number>;
+let ids: { ada: number; charles: number; marie: number; notes: number; engine: number };
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'atlas-trav-'));
   db = await openDatabase(dir);
-  ids = {};
   await db.transact((tx) => {
-    ids.ada = tx.createNode(['Person'], { name: 'Ada', born: 1815 });
-    ids.charles = tx.createNode(['Person'], { name: 'Charles', born: 1791 });
-    ids.marie = tx.createNode(['Person'], { name: 'Marie', born: 1867 });
-    ids.notes = tx.createNode(['Document'], { title: 'Notes', year: 1843 });
-    ids.engine = tx.createNode(['Concept'], { name: 'Analytical Engine' });
-    tx.createEdge('KNOWS', ids.ada, ids.charles);
-    tx.createEdge('WROTE', ids.ada, ids.notes);
-    tx.createEdge('CITES', ids.notes, ids.engine);
-    tx.createEdge('INVENTED', ids.charles, ids.engine);
+    const ada = tx.createNode(['Person'], { name: 'Ada', born: 1815 });
+    const charles = tx.createNode(['Person'], { name: 'Charles', born: 1791 });
+    const marie = tx.createNode(['Person'], { name: 'Marie', born: 1867 });
+    const notes = tx.createNode(['Document'], { title: 'Notes', year: 1843 });
+    const engine = tx.createNode(['Concept'], { name: 'Analytical Engine' });
+    tx.createEdge('KNOWS', ada, charles);
+    tx.createEdge('WROTE', ada, notes);
+    tx.createEdge('CITES', notes, engine);
+    tx.createEdge('INVENTED', charles, engine);
+    ids = { ada, charles, marie, notes, engine };
   });
 });
 afterEach(async () => {
@@ -58,7 +58,13 @@ describe('fluent traversal — nodes', () => {
   it('out/in/both hop with optional type filter', () => {
     const g = db.graph();
     expect(g.node(ids.ada).out().count()).toBe(2);
-    expect(g.node(ids.ada).out('KNOWS').toArray().map((n) => n.id)).toEqual([ids.charles]);
+    expect(
+      g
+        .node(ids.ada)
+        .out('KNOWS')
+        .toArray()
+        .map((n) => n.id),
+    ).toEqual([ids.charles]);
     expect(g.node(ids.engine).in().count()).toBe(2);
     expect(g.node(ids.charles).both().count()).toBe(2); // ada (in via KNOWS), engine (out)
   });
@@ -74,7 +80,11 @@ describe('fluent traversal — nodes', () => {
       .map((n) => n.props.name);
     expect(names).toEqual(['Charles', 'Ada', 'Marie']);
     expect(
-      g.nodes('Person').order((a, b) => (a.props.born as number) - (b.props.born as number)).skip(1).first()?.props.name,
+      g
+        .nodes('Person')
+        .order((a, b) => (a.props.born as number) - (b.props.born as number))
+        .skip(1)
+        .first()?.props.name,
     ).toBe('Ada');
     expect(g.node(ids.ada).out().out().dedup().count()).toBe(1); // engine reached once via notes
     expect(g.nodes('Nope').count()).toBe(0);
