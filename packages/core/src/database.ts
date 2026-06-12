@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
+import { ChangeFeed, type ChangeEvent } from './change-feed.js';
 import { decodeBatch, encodeBatch } from './codec.js';
 import { AtlasError } from './errors.js';
 import {
@@ -45,6 +46,8 @@ export class AtlasDatabase {
   ) {}
 
   private readonly queue = new WriteQueue();
+
+  private readonly feed = new ChangeFeed();
 
   static async open(dir: string, opts: OpenOptions = {}): Promise<AtlasDatabase> {
     const options: Required<OpenOptions> = {
@@ -192,6 +195,7 @@ export class AtlasDatabase {
       await this.wal.append(encodeBatch(batch));
       this.store.applyBatch(batch);
       this.lastTxId = batch.txId;
+      this.feed.emit(batch);
       if (this.wal.bytesWritten >= this.opts.snapshotWalBytes && !this.checkpointing)
         void this.checkpoint().catch((err) => console.warn('[atlas] auto-checkpoint failed', err));
       return { txId: batch.txId };
@@ -230,6 +234,15 @@ export class AtlasDatabase {
           }),
       );
     });
+  }
+
+  /**
+   * Subscribe to committed batches. Delivery is asynchronous; on overflow the
+   * subscriber receives one resync_required and is closed. Cursors are
+   * per-process: after a restart, re-read state and subscribe fresh.
+   */
+  subscribe(handler: (e: ChangeEvent) => void, opts: { fromTxId?: number } = {}): () => void {
+    return this.feed.subscribe(handler, opts);
   }
 
   /** Fluent traversal entry point over committed state. */
