@@ -14,6 +14,7 @@ import type { ScalarValue } from './index/keys.js';
 import type { RangeQuery } from './index/property-index.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
+import { GraphView } from './traversal/traversal.js';
 import { TxBuilder } from './tx.js';
 import type { EdgeId, EdgeRecord, IndexDef, NodeId, NodeRecord } from './types.js';
 import { WalWriter, readWal, type FsyncMode } from './wal.js';
@@ -228,6 +229,11 @@ export class AtlasDatabase {
           }),
       );
     });
+  }
+
+  /** Fluent traversal entry point over committed state. */
+  graph(): GraphView {
+    return new GraphView(this.store);
   }
 
   getNode(id: NodeId): NodeRecord | undefined {
