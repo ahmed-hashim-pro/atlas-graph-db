@@ -3,7 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./dist/index.js" },
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "types": "./dist/index.d.ts",
-  "dependencies": { "@atlas/core": "workspace:*" }
+  "dependencies": {
+    "@atlas/core": "workspace:*"
+  }
 }

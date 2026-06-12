@@ -35,7 +35,11 @@ describe('parseExpression', () => {
     expect(parse("p.name CONTAINS 'love'")).toMatchObject({ kind: 'text', op: 'contains' });
     expect(parse("p.name STARTS WITH 'A'")).toMatchObject({ kind: 'text', op: 'startsWith' });
     expect(parse("p.name ENDS WITH 'e'")).toMatchObject({ kind: 'text', op: 'endsWith' });
-    expect(parse('EXISTS(p.born)')).toMatchObject({ kind: 'exists', target: 'p', property: 'born' });
+    expect(parse('EXISTS(p.born)')).toMatchObject({
+      kind: 'exists',
+      target: 'p',
+      property: 'born',
+    });
     expect(parse('(a.x = 1)')).toMatchObject({ kind: 'cmp' });
   });
 

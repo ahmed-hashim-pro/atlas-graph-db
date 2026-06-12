@@ -67,7 +67,8 @@ export function renderExpr(e: Expr): string {
     case 'cmp':
       return `${renderExpr(e.left)} ${e.op} ${renderExpr(e.right)}`;
     case 'text': {
-      const op = e.op === 'contains' ? 'CONTAINS' : e.op === 'startsWith' ? 'STARTS WITH' : 'ENDS WITH';
+      const op =
+        e.op === 'contains' ? 'CONTAINS' : e.op === 'startsWith' ? 'STARTS WITH' : 'ENDS WITH';
       return `${renderExpr(e.left)} ${op} ${renderExpr(e.right)}`;
     }
     case 'in':

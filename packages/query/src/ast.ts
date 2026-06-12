@@ -9,7 +9,8 @@ export type Expr =
   | { kind: 'variable'; name: string; pos: Pos }
   | { kind: 'prop'; target: string; property: string; pos: Pos }
   | { kind: 'not'; expr: Expr; pos: Pos }
-  | { kind: 'and' | 'or'; left: Expr; right: Expr; pos: Pos }
+  | { kind: 'and'; left: Expr; right: Expr; pos: Pos }
+  | { kind: 'or'; left: Expr; right: Expr; pos: Pos }
   | { kind: 'cmp'; op: '=' | '<>' | '<' | '<=' | '>' | '>='; left: Expr; right: Expr; pos: Pos }
   | { kind: 'in'; needle: Expr; haystack: Expr; pos: Pos }
   | { kind: 'text'; op: 'contains' | 'startsWith' | 'endsWith'; left: Expr; right: Expr; pos: Pos }

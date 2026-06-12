@@ -1,4 +1,8 @@
 {
   "files": [],
-  "references": [{ "path": "packages/core" }, { "path": "packages/datasets" }, { "path": "packages/query" }]
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/datasets" },
+    { "path": "packages/query" }
+  ]
 }

@@ -48,9 +48,9 @@ describe('planner start selection', () => {
   });
 
   it('extracts indexed equalities from top-level WHERE conjuncts', () => {
-    expect(leftmost(plan('MATCH (p:Person) WHERE p.born = $b AND p.name = $n RETURN p'))).toMatchObject(
-      { op: 'IndexSeek', property: 'born' },
-    );
+    expect(
+      leftmost(plan('MATCH (p:Person) WHERE p.born = $b AND p.name = $n RETURN p')),
+    ).toMatchObject({ op: 'IndexSeek', property: 'born' });
   });
 
   it('falls back to the cheapest LabelScan, then AllNodesScan', () => {
@@ -80,7 +80,9 @@ describe('planner start selection', () => {
   });
 
   it('EXPLAIN serialization strips Ast fields and is JSON-round-trippable', () => {
-    const p = plan("MATCH (p:Person {born: 1815})-[:WROTE*1..2]->(d) WHERE d.year > 1 RETURN p, d LIMIT 5");
+    const p = plan(
+      'MATCH (p:Person {born: 1815})-[:WROTE*1..2]->(d) WHERE d.year > 1 RETURN p, d LIMIT 5',
+    );
     const json = serializePlan(p);
     const text = JSON.stringify(json);
     expect(text).not.toContain('Ast');

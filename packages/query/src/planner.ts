@@ -106,7 +106,12 @@ function chooseStart(
       cost = store.labelCount(cheapest);
       choice = {
         nodeIdx: i,
-        scan: { op: 'LabelScan', variable: varName(node.variable, 'n'), label: cheapest, estCost: cost },
+        scan: {
+          op: 'LabelScan',
+          variable: varName(node.variable, 'n'),
+          label: cheapest,
+          estCost: cost,
+        },
         consumedLabel: cheapest,
       };
     }
@@ -145,18 +150,42 @@ export function planQuery(query: ReadQuery, store: GraphStore): PlanNode {
     let chain: PlanNode = start.scan;
     // Residual start-node checks not consumed by the scan:
     const residLabels = startNode.labels.filter((l) => l !== start.consumedLabel);
-    if (start.scan.op !== 'FromBound' && residLabels.length === 0 && startNode.labels.length === 0) {
+    if (
+      start.scan.op !== 'FromBound' &&
+      residLabels.length === 0 &&
+      startNode.labels.length === 0
+    ) {
       // AllNodesScan with no labels: nothing to check
     }
-    chain = withNodeChecks(chain, nodeVars[start.nodeIdx]!, residLabels, startNode, start.consumedProperty);
+    chain = withNodeChecks(
+      chain,
+      nodeVars[start.nodeIdx]!,
+      residLabels,
+      startNode,
+      start.consumedProperty,
+    );
     // Expand left (toward index 0) then right (toward the end).
     for (let i = start.nodeIdx - 1; i >= 0; i--) {
       const edge = pattern.edges[i]!;
-      chain = expandStep(chain, nodeVars[i + 1]!, nodeVars[i]!, edge, FLIP[edge.direction], pattern.nodes[i]!);
+      chain = expandStep(
+        chain,
+        nodeVars[i + 1]!,
+        nodeVars[i]!,
+        edge,
+        FLIP[edge.direction],
+        pattern.nodes[i]!,
+      );
     }
     for (let i = start.nodeIdx; i < pattern.edges.length; i++) {
       const edge = pattern.edges[i]!;
-      chain = expandStep(chain, nodeVars[i]!, nodeVars[i + 1]!, edge, edge.direction, pattern.nodes[i + 1]!);
+      chain = expandStep(
+        chain,
+        nodeVars[i]!,
+        nodeVars[i + 1]!,
+        edge,
+        edge.direction,
+        pattern.nodes[i + 1]!,
+      );
     }
     for (const [i, n] of pattern.nodes.entries()) {
       if (n.variable !== undefined) bound.add(n.variable);
@@ -181,8 +210,12 @@ export function planQuery(query: ReadQuery, store: GraphStore): PlanNode {
   if (hasAggregate) {
     plan = {
       op: 'Aggregate',
-      groupBy: query.items.filter((it) => !isAggregateItem(it.expr)).map((it) => it.alias ?? renderExpr(it.expr)),
-      aggregates: query.items.filter((it) => isAggregateItem(it.expr)).map((it) => renderExpr(it.expr)),
+      groupBy: query.items
+        .filter((it) => !isAggregateItem(it.expr))
+        .map((it) => it.alias ?? renderExpr(it.expr)),
+      aggregates: query.items
+        .filter((it) => isAggregateItem(it.expr))
+        .map((it) => renderExpr(it.expr)),
       child: plan,
     };
   } else {
@@ -190,7 +223,11 @@ export function planQuery(query: ReadQuery, store: GraphStore): PlanNode {
   }
   if (query.distinct) plan = { op: 'Distinct', child: plan };
   if (query.orderBy.length > 0)
-    plan = { op: 'Sort', keys: query.orderBy.map((o) => `${renderExpr(o.expr)}${o.desc ? ' DESC' : ''}`), child: plan };
+    plan = {
+      op: 'Sort',
+      keys: query.orderBy.map((o) => `${renderExpr(o.expr)}${o.desc ? ' DESC' : ''}`),
+      child: plan,
+    };
   if (query.skip !== undefined || query.limit !== undefined)
     plan = {
       op: 'SkipLimit',
@@ -219,7 +256,12 @@ function expandStep(
   to: string,
   edge: { variable?: string; types: string[]; varLength?: { min: number; max: number } },
   direction: 'out' | 'in' | 'both',
-  toNode: { labels: string[]; props: { property: string; value: Expr }[]; variable?: string; pos: { line: number; column: number } },
+  toNode: {
+    labels: string[];
+    props: { property: string; value: Expr }[];
+    variable?: string;
+    pos: { line: number; column: number };
+  },
 ): PlanNode {
   const base: PlanNode = edge.varLength
     ? {
@@ -259,7 +301,13 @@ function withNodeChecks(
     const expr: Expr = {
       kind: 'in',
       needle: { kind: 'literal', value: label, pos: node.pos },
-      haystack: { kind: 'call', func: 'labels', arg: { kind: 'variable', name: variable, pos: node.pos }, distinct: false, pos: node.pos },
+      haystack: {
+        kind: 'call',
+        func: 'labels',
+        arg: { kind: 'variable', name: variable, pos: node.pos },
+        distinct: false,
+        pos: node.pos,
+      },
       pos: node.pos,
     };
     plan = { op: 'Filter', expr: renderExpr(expr), exprAst: expr, child: plan };

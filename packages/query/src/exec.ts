@@ -54,19 +54,38 @@ class Guard {
   }
 
   private timeout(): never {
-    throw new AqlError('TIMEOUT', `query exceeded ${this.opts.timeoutMs} ms`, ORIGIN, this.opts.source);
+    throw new AqlError(
+      'TIMEOUT',
+      `query exceeded ${this.opts.timeoutMs} ms`,
+      ORIGIN,
+      this.opts.source,
+    );
   }
 }
 
 function isBindingOp(node: PlanNode): boolean {
-  return ['AllNodesScan', 'LabelScan', 'IndexSeek', 'FromBound', 'Expand', 'VarLengthExpand', 'Filter', 'CartesianProduct'].includes(node.op);
+  return [
+    'AllNodesScan',
+    'LabelScan',
+    'IndexSeek',
+    'FromBound',
+    'Expand',
+    'VarLengthExpand',
+    'Filter',
+    'CartesianProduct',
+  ].includes(node.op);
 }
 
 function hasAllLabels(n: NodeRecord, labels: string[]): boolean {
   return labels.every((l) => n.labels.includes(l));
 }
 
-export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opts: ExecOptions): ReadResult {
+export function runRead(
+  plan: PlanNode,
+  query: ReadQuery,
+  store: GraphStore,
+  opts: ExecOptions,
+): ReadResult {
   const guard = new Guard(opts);
   const ctx: EvalContext = { params: opts.params, source: opts.source };
 
@@ -78,7 +97,11 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
   }
   // A WHERE Filter belongs to the binding subtree; result ops were skipped above.
 
-  function* edgesFor(id: number, types: string[], direction: 'out' | 'in' | 'both'): IterableIterator<{ edge: EdgeRecord; other: number }> {
+  function* edgesFor(
+    id: number,
+    types: string[],
+    direction: 'out' | 'in' | 'both',
+  ): IterableIterator<{ edge: EdgeRecord; other: number }> {
     const typeList: (string | undefined)[] = types.length === 0 ? [undefined] : types;
     const seen = direction === 'both' ? new Set<number>() : undefined;
     for (const t of typeList) {
@@ -125,7 +148,8 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
       }
       case 'IndexSeek': {
         const v = evalExpr(node.valueAst, new Map(), ctx);
-        if (v === null || Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return;
+        if (v === null || Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date)))
+          return;
         for (const id of store.indexes.lookupExact(node.label, node.property, v) ?? []) {
           guard.bump();
           const n = store.getNode(id);
@@ -134,7 +158,12 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
         return;
       }
       case 'FromBound':
-        throw new AqlError('RUNTIME_ERROR', 'unspliced FromBound reached the executor', ORIGIN, opts.source);
+        throw new AqlError(
+          'RUNTIME_ERROR',
+          'unspliced FromBound reached the executor',
+          ORIGIN,
+          opts.source,
+        );
       case 'Filter': {
         for (const b of bindings(node.child)) {
           if (evalExpr(node.exprAst, b, ctx) === true) yield b;
@@ -203,7 +232,12 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
         return;
       }
       default:
-        throw new AqlError('RUNTIME_ERROR', `unexpected plan op ${node.op} in binding subtree`, ORIGIN, opts.source);
+        throw new AqlError(
+          'RUNTIME_ERROR',
+          `unexpected plan op ${node.op} in binding subtree`,
+          ORIGIN,
+          opts.source,
+        );
     }
   }
 
@@ -231,10 +265,18 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
       max?: RuntimeValue;
     }
     const newAcc = (): Acc => ({ count: 0, sum: 0, collected: [], collectedKeys: new Set() });
-    const groups = new Map<string, { keyValues: Map<number, RuntimeValue>; accs: Map<number, Acc> }>();
+    const groups = new Map<
+      string,
+      { keyValues: Map<number, RuntimeValue>; accs: Map<number, Acc> }
+    >();
     for (const it of query.items)
       if (isAggregateItem(it.expr) && it.expr.kind !== 'call')
-        throw new AqlError('SEMANTIC_ERROR', 'aggregates must be top-level RETURN items', it.pos, opts.source);
+        throw new AqlError(
+          'SEMANTIC_ERROR',
+          'aggregates must be top-level RETURN items',
+          it.pos,
+          opts.source,
+        );
     for (const b of bindings(bindingRoot)) {
       const keyValues = new Map<number, RuntimeValue>();
       for (const [i, it] of query.items.entries())
@@ -263,8 +305,13 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
         acc.count++;
         if (typeof v === 'number') acc.sum += v;
         if (call.func === 'collect') acc.collected.push(v);
-        if (call.func === 'min' && (acc.min === undefined || (compareRuntime(v, acc.min) ?? 1) < 0)) acc.min = v;
-        if (call.func === 'max' && (acc.max === undefined || (compareRuntime(v, acc.max) ?? -1) > 0)) acc.max = v;
+        if (call.func === 'min' && (acc.min === undefined || (compareRuntime(v, acc.min) ?? 1) < 0))
+          acc.min = v;
+        if (
+          call.func === 'max' &&
+          (acc.max === undefined || (compareRuntime(v, acc.max) ?? -1) > 0)
+        )
+          acc.max = v;
       }
     }
     if (groups.size === 0 && query.items.every((it) => isAggregateItem(it.expr)))
@@ -306,7 +353,9 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
 
   if (query.orderBy.length > 0) {
     const keyFns = query.orderBy.map((o) => {
-      const aliasIdx = columns.indexOf(o.expr.kind === 'variable' ? o.expr.name : renderExpr(o.expr));
+      const aliasIdx = columns.indexOf(
+        o.expr.kind === 'variable' ? o.expr.name : renderExpr(o.expr),
+      );
       return (r: Row): RuntimeValue => {
         if (aliasIdx >= 0) return r.values[aliasIdx]!;
         if (!r.binding)
@@ -337,11 +386,21 @@ export function runRead(plan: PlanNode, query: ReadQuery, store: GraphStore, opt
   return { columns, rows: rows.map((r) => r.values), stats: { rowsExamined: guard.rowsExamined } };
 }
 
-function countOf(e: Expr | undefined, ctx: EvalContext, opts: ExecOptions, what: string): number | undefined {
+function countOf(
+  e: Expr | undefined,
+  ctx: EvalContext,
+  opts: ExecOptions,
+  what: string,
+): number | undefined {
   if (e === undefined) return undefined;
   const v = evalExpr(e, new Map(), ctx);
   if (typeof v !== 'number' || !Number.isInteger(v) || v < 0)
-    throw new AqlError('RUNTIME_ERROR', `${what} expects a non-negative integer, got ${String(v)}`, e.pos, opts.source);
+    throw new AqlError(
+      'RUNTIME_ERROR',
+      `${what} expects a non-negative integer, got ${String(v)}`,
+      e.pos,
+      opts.source,
+    );
   return v;
 }
 

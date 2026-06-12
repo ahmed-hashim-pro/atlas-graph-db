@@ -1,4 +1,9 @@
-export type AqlErrorCode = 'PARSE_ERROR' | 'SEMANTIC_ERROR' | 'RUNTIME_ERROR' | 'TIMEOUT' | 'ROW_LIMIT';
+export type AqlErrorCode =
+  | 'PARSE_ERROR'
+  | 'SEMANTIC_ERROR'
+  | 'RUNTIME_ERROR'
+  | 'TIMEOUT'
+  | 'ROW_LIMIT';
 
 /** Caret rendering: the offending source line, then a `^` under the 1-based column. */
 export function renderSnippet(source: string, line: number, column: number): string {
