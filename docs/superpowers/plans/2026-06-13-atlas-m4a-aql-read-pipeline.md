@@ -2523,11 +2523,24 @@ describe('multi-pattern joins', () => {
   });
 
   it('repeated node variable inside one pattern must re-match the same node', () => {
-    const r = run(`MATCH (s)-[:REL]->(m)-[:REL]->(e)-[:REL]->(s) RETURN s.k, m.k, e.k`);
+    // Anchored start (orchestrator decision below): IndexSeek from the single
+    // node `a` yields exactly one binding of the directed 3-cycle a->b->c->a.
+    const r = run(`MATCH (s:V {k: 'a'})-[:REL]->(m)-[:REL]->(e)-[:REL]->(s) RETURN s.k, m.k, e.k`);
     expect(r.rows).toEqual([['a', 'b', 'c']]); // the only 3-cycle
   });
 });
 ```
+
+> **Orchestrator decision (Task 8 review, 2026-06-13):** the originally-drafted
+> query `MATCH (s)-[:REL]->(m)-[:REL]->(e)-[:REL]->(s)` left `(s)` anonymous, so
+> the planner emitted an AllNodesScan and enumerated the single directed 3-cycle
+> once per cycle member — three rotational bindings of `(s,m,e)`, not the
+> hand-derived `[['a','b','c']]`. The implementer correctly surfaced this. Per
+> the review, **option (b) is ratified**: anchor the start with `(s:V {k:'a'})`
+> so an IndexSeek begins from a fixed node and the closing `-[:REL]->(s)`
+> re-match yields exactly one binding `[['a','b','c']]` — preserving the
+> spec-literal expected value and the re-match invariant the case was pinning.
+> No rotation-non-deduplication semantics are introduced.
 
 - [ ] **Step 2: Write the aggregate tests**
 
