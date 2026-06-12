@@ -1,6 +1,7 @@
 import { AtlasError } from './errors.js';
 import { IndexRegistry } from './index/registry.js';
 import { Interner } from './interner.js';
+import { SchemaTracker } from './schema.js';
 import type { CommittedBatch, EdgeId, EdgeRecord, NodeId, NodeRecord, Op } from './types.js';
 
 type Adjacency = Map<NodeId, Map<number, Set<EdgeId>>>;
@@ -36,6 +37,7 @@ export class GraphStore {
   readonly edges = new Map<EdgeId, EdgeRecord>();
   readonly types = new Interner();
   readonly indexes = new IndexRegistry();
+  readonly schema = new SchemaTracker();
   private readonly outAdj: Adjacency = new Map();
   private readonly inAdj: Adjacency = new Map();
   private readonly byLabel = new Map<string, Set<NodeId>>();
@@ -54,6 +56,7 @@ export class GraphStore {
    */
   applyOp(op: Op): void {
     this.indexes.beforeApply(op, this);
+    this.schema.beforeApply(op, this);
     switch (op.op) {
       case 'createNode': {
         if (this.nodes.has(op.id)) throw new AtlasError('INTERNAL', `node ${op.id} already exists`);

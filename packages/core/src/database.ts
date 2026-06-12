@@ -12,6 +12,7 @@ import {
 import { IdAllocator } from './id-allocator.js';
 import type { ScalarValue } from './index/keys.js';
 import type { RangeQuery } from './index/property-index.js';
+import type { SchemaSummary } from './schema.js';
 import { decodeSnapshot, encodeSnapshot } from './snapshot.js';
 import { GraphStore } from './store.js';
 import { GraphView } from './traversal/traversal.js';
@@ -262,6 +263,10 @@ export class AtlasDatabase {
 
   listIndexes(): IndexDef[] {
     return this.store.indexes.defs();
+  }
+
+  schema(): SchemaSummary {
+    return this.store.schema.summary();
   }
 
   createIndex(def: IndexDef): Promise<{ txId: number }> {
