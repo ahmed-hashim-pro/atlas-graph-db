@@ -48,6 +48,12 @@ importers:
 
   packages/datasets: {}
 
+  packages/query:
+    dependencies:
+      '@atlas/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@emnapi/core@1.10.0':
