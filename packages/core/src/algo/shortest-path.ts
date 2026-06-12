@@ -19,7 +19,10 @@ function weightOf(e: EdgeRecord, weightProp?: string): number {
   const v = e.props[weightProp];
   const w = typeof v === 'number' ? v : 1;
   if (w < 0)
-    throw new AtlasError('VALIDATION', `negative weight ${w} on edge ${e.id}; Dijkstra requires >= 0`);
+    throw new AtlasError(
+      'VALIDATION',
+      `negative weight ${w} on edge ${e.id}; Dijkstra requires >= 0`,
+    );
   return w;
 }
 

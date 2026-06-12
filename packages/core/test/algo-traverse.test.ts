@@ -42,7 +42,9 @@ describe('algo.bfs', () => {
 
   it('respects maxDepth, type filter, and direction', async () => {
     expect(await db.algo.bfs({ from: n[0]!, maxDepth: 1 })).toHaveLength(3);
-    expect((await db.algo.bfs({ from: n[0]!, type: 'REL' })).map((r) => r.node)).not.toContain(n[5]!);
+    expect((await db.algo.bfs({ from: n[0]!, type: 'REL' })).map((r) => r.node)).not.toContain(
+      n[5]!,
+    );
     const up = await db.algo.bfs({ from: n[3]!, direction: 'in', type: 'REL' });
     expect(up.map((r) => r.node).sort()).toEqual([n[0]!, n[1]!, n[2]!, n[3]!].sort());
   });

@@ -21,3 +21,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: SCALE=${{ github.event.inputs.scale || '0.25' }} node --expose-gc --import tsx packages/core/bench/storage.bench.ts
+      - run: SCALE=${{ github.event.inputs.scale || '0.25' }} node --expose-gc --import tsx packages/core/bench/algo.bench.ts

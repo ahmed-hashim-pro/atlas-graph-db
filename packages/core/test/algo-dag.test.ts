@@ -30,7 +30,8 @@ describe('algo.topoSort', () => {
     expect(rows).toHaveLength(4);
     const orderOf = new Map(rows.map((r) => [r.node, r.order]));
     // Every edge from->to must satisfy order(from) < order(to).
-    for (const e of db.outEdges(n[0]!)) expect(orderOf.get(n[0]!)!).toBeLessThan(orderOf.get(e.to)!);
+    for (const e of db.outEdges(n[0]!))
+      expect(orderOf.get(n[0]!)!).toBeLessThan(orderOf.get(e.to)!);
     expect(orderOf.get(n[1]!)!).toBeLessThan(orderOf.get(n[3]!)!);
     expect(orderOf.get(n[2]!)!).toBeLessThan(orderOf.get(n[3]!)!);
     expect(new Set(rows.map((r) => r.order))).toEqual(new Set([0, 1, 2, 3]));

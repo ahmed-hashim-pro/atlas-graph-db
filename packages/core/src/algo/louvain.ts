@@ -22,7 +22,10 @@ export async function louvain(
   if (n === 0) return [];
   const pos = new Map<NodeId, number>(ids.map((id, i) => [id, i]));
 
-  let level: Level = { adj: Array.from({ length: n }, () => new Map()), selfW: new Float64Array(n) };
+  let level: Level = {
+    adj: Array.from({ length: n }, () => new Map()),
+    selfW: new Float64Array(n),
+  };
   let m2 = 0; // total weight x2
   for (const e of store.edges.values()) {
     await ticker.tick();
@@ -45,14 +48,18 @@ export async function louvain(
     if (!moved) break;
     const prevN = level.adj.length;
     const k = Math.max(...communities) + 1;
-    const next: Level = { adj: Array.from({ length: k }, () => new Map()), selfW: new Float64Array(k) };
+    const next: Level = {
+      adj: Array.from({ length: k }, () => new Map()),
+      selfW: new Float64Array(k),
+    };
     for (let v = 0; v < prevN; v++) {
       await ticker.tick();
       const cv = communities[v]!;
       next.selfW[cv]! += level.selfW[v]!;
       for (const [w, wt] of level.adj[v]!) {
         const cw = communities[w]!;
-        if (cv === cw) next.selfW[cv]! += wt; // both directions land here -> doubled, as required
+        if (cv === cw)
+          next.selfW[cv]! += wt; // both directions land here -> doubled, as required
         else next.adj[cv]!.set(cw, (next.adj[cv]!.get(cw) ?? 0) + wt);
       }
     }

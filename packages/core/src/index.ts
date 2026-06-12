@@ -1,3 +1,5 @@
+export { AlgoFacade } from './algo/facade.js';
+export { type AlgoOptions, type Direction, type PathResult } from './algo/runner.js';
 export { ChangeFeed, type ChangeEvent } from './change-feed.js';
 export { AtlasDatabase, openDatabase, type OpenOptions, type ReadLease } from './database.js';
 export { AtlasError, type AtlasErrorCode } from './errors.js';

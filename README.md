@@ -4,9 +4,10 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
-**Status:** M2 — indexes (exact/range/full-text), unique constraints, fluent
-traversal API with leased streaming, schema introspection, change feed,
-science-history dataset.
+**Status:** M3 — graph algorithms (`db.algo.*`): BFS/DFS, Dijkstra/A\*,
+all-shortest-paths, degree, weak/strong components, topoSort, cycles,
+PageRank, Louvain, sampled Brandes betweenness — all lease-protected with
+cooperative yielding and budgets.
 Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`.
 
 ## Develop
