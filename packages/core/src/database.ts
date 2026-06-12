@@ -24,6 +24,13 @@ export interface OpenOptions {
   snapshotWalBytes?: number;
 }
 
+export interface ReadLease {
+  /** Idempotent. Lets buffered writes proceed. */
+  release(): void;
+  /** True once the budget elapsed and the queue was force-released. */
+  readonly expired: boolean;
+}
+
 export class AtlasDatabase {
   private constructor(
     private readonly dir: string,
@@ -186,6 +193,40 @@ export class AtlasDatabase {
       if (this.wal.bytesWritten >= this.opts.snapshotWalBytes && !this.checkpointing)
         void this.checkpoint().catch((err) => console.warn('[atlas] auto-checkpoint failed', err));
       return { txId: batch.txId };
+    });
+  }
+
+  /**
+   * Acquire a read lease: the write queue holds (writes buffer, nothing
+   * applies) until release() or the budget elapses — whichever comes first.
+   * Yielding readers (stream(), future algorithms) use this for a
+   * point-in-time view; synchronous reads never need it.
+   */
+  acquireReadLease(opts: { budgetMs?: number } = {}): Promise<ReadLease> {
+    const budgetMs = opts.budgetMs ?? 30_000;
+    return new Promise<ReadLease>((resolveAcquire) => {
+      void this.queue.run(
+        () =>
+          new Promise<void>((resolveHold) => {
+            let expired = false;
+            let done = false;
+            const finish = (byExpiry: boolean): void => {
+              if (done) return;
+              done = true;
+              expired = byExpiry;
+              clearTimeout(timer);
+              resolveHold();
+            };
+            const timer = setTimeout(() => finish(true), budgetMs);
+            timer.unref();
+            resolveAcquire({
+              release: () => finish(false),
+              get expired() {
+                return expired;
+              },
+            });
+          }),
+      );
     });
   }
 
