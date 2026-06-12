@@ -3,6 +3,7 @@ import type { LeaseProvider } from '../traversal/traversal.js';
 import type { NodeId } from '../types.js';
 import { components, type ComponentsOptions } from './components.js';
 import { topoSort, cycles } from './dag.js';
+import { louvain, type LouvainOptions } from './louvain.js';
 import { pagerank, type PagerankOptions } from './pagerank.js';
 import { withAlgoLease, type AlgoOptions, type Direction, type PathResult } from './runner.js';
 import {
@@ -66,5 +67,9 @@ export class AlgoFacade {
 
   pagerank(opts: PagerankOptions & AlgoOptions = {}): Promise<{ node: NodeId; score: number }[]> {
     return withAlgoLease(this.leases, opts, (t) => pagerank(this.store, t, opts));
+  }
+
+  louvain(opts: LouvainOptions & AlgoOptions = {}): Promise<{ node: NodeId; community: number }[]> {
+    return withAlgoLease(this.leases, opts, (t) => louvain(this.store, t, opts));
   }
 }
