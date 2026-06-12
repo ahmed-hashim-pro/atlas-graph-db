@@ -11,7 +11,8 @@ type Action =
   | { kind: 'addEdge'; fromPick: number; toPick: number }
   | { kind: 'setProps'; pick: number }
   | { kind: 'delEdge'; pick: number }
-  | { kind: 'delNode'; pick: number };
+  | { kind: 'delNode'; pick: number }
+  | { kind: 'ddl'; which: number };
 
 const actionArb: fc.Arbitrary<Action> = fc.oneof(
   fc.constant<Action>({ kind: 'addNode' }),
@@ -19,6 +20,7 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
   fc.record({ kind: fc.constant('setProps' as const), pick: fc.nat(99) }),
   fc.record({ kind: fc.constant('delEdge' as const), pick: fc.nat(99) }),
   fc.record({ kind: fc.constant('delNode' as const), pick: fc.nat(99) }),
+  fc.record({ kind: fc.constant('ddl' as const), which: fc.nat(5) }),
 );
 
 async function applyActions(db: AtlasDatabase, actions: Action[]): Promise<void> {
@@ -62,6 +64,22 @@ async function applyActions(db: AtlasDatabase, actions: Action[]): Promise<void>
             }
             break;
           }
+          case 'ddl': {
+            const defs = [
+              { kind: 'property', label: 'N', property: 'v' },
+              { kind: 'fulltext', label: 'N', property: 'v' },
+              { kind: 'unique', label: 'N', property: 'v' },
+            ] as const;
+            const def = defs[a.which % 3]!;
+            const exists = db
+              .listIndexes()
+              .some(
+                (d) => d.kind === def.kind && d.label === def.label && d.property === def.property,
+              );
+            if (a.which < 3 && !exists) tx.createIndex(def);
+            else if (a.which >= 3 && exists) tx.dropIndex(def);
+            break;
+          }
         }
       })
       .catch(() => undefined); // detach-race rejections are fine; invariants are what matter
@@ -77,6 +95,7 @@ describe('storage property tests', () => {
           const db = await openDatabase(dir, { snapshotWalBytes: 2048 });
           await applyActions(db, actions);
           const before = db.stats();
+          const defsBefore = db.listIndexes();
           db.checkInvariants();
           await db.close();
 
@@ -86,6 +105,8 @@ describe('storage property tests', () => {
             throw new Error(
               `reopen mismatch: ${JSON.stringify(db2.stats())} vs ${JSON.stringify(before)}`,
             );
+          if (JSON.stringify(db2.listIndexes()) !== JSON.stringify(defsBefore))
+            throw new Error('reopen index defs mismatch');
           await db2.close();
         } finally {
           await rm(dir, { recursive: true, force: true });
