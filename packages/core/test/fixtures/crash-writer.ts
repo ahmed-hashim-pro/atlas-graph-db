@@ -6,6 +6,8 @@ const dir = process.argv[2];
 if (!dir) throw new Error('usage: crash-writer <dataDir>');
 
 const db = await openDatabase(dir, { snapshotWalBytes: 8 * 1024 });
+if (db.listIndexes().length === 0)
+  await db.createIndex({ kind: 'property', label: 'Crash', property: 'payload' });
 for (;;) {
   const { txId } = await db.transact((tx) => {
     const a = tx.createNode(['Crash'], { payload: 'x'.repeat(64) });

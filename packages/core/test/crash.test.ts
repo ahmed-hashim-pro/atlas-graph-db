@@ -63,6 +63,7 @@ async function crashOnce(): Promise<void> {
     const db = await openDatabase(dir);
     try {
       db.checkInvariants();
+      expect(db.listIndexes()).toHaveLength(1);
       const { nodeCount, edgeCount } = db.stats();
       // Every tx creates exactly 2 nodes + 1 edge; recovered state must be whole transactions...
       expect(nodeCount % 2).toBe(0);
