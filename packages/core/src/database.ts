@@ -1,4 +1,5 @@
 import { mkdir, readFile, rename, rm, truncate, writeFile } from 'node:fs/promises';
+import { AlgoFacade } from './algo/facade.js';
 import { ChangeFeed, type ChangeEvent } from './change-feed.js';
 import { decodeBatch, encodeBatch } from './codec.js';
 import { AtlasError } from './errors.js';
@@ -56,6 +57,13 @@ export class AtlasDatabase {
   private readonly queue = new WriteQueue();
 
   private readonly feed: ChangeFeed;
+
+  private algoFacade: AlgoFacade | undefined;
+
+  /** Graph algorithms (spec §4.7), lease-protected. */
+  get algo(): AlgoFacade {
+    return (this.algoFacade ??= new AlgoFacade(this.store, this));
+  }
 
   static async open(dir: string, opts: OpenOptions = {}): Promise<AtlasDatabase> {
     const options: Required<OpenOptions> = {
