@@ -233,7 +233,7 @@ export class AtlasDatabase {
 
   /** Fluent traversal entry point over committed state. */
   graph(): GraphView {
-    return new GraphView(this.store);
+    return new GraphView(this.store, this);
   }
 
   getNode(id: NodeId): NodeRecord | undefined {

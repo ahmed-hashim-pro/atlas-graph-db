@@ -17,6 +17,14 @@ export interface TraversalPath {
 
 type Source<T> = () => IterableIterator<Step<T>>;
 
+export interface LeaseProvider {
+  acquireReadLease(opts?: {
+    budgetMs?: number;
+  }): Promise<{ release(): void; readonly expired: boolean }>;
+}
+
+const STREAM_YIELD_EVERY = 1000;
+
 function* mapIter<A, B>(it: IterableIterator<A>, f: (a: A) => B): IterableIterator<B> {
   for (const a of it) yield f(a);
 }
@@ -24,6 +32,7 @@ function* mapIter<A, B>(it: IterableIterator<A>, f: (a: A) => B): IterableIterat
 abstract class BaseTraversal<T extends { id: number; props: Props }> {
   constructor(
     protected readonly store: GraphStore,
+    protected readonly leases: LeaseProvider,
     protected readonly source: Source<T>,
   ) {}
 
@@ -130,15 +139,44 @@ abstract class BaseTraversal<T extends { id: number; props: Props }> {
     return [...mapIter(this.source(), (s) => s.path)];
   }
 
-  /** Internal: raw step iterator (stream() in a later task consumes this). */
+  /**
+   * Async terminal: yields every result under a read lease (point-in-time
+   * view — concurrent writes buffer until the stream finishes or its budget
+   * expires), surrendering the event loop every STREAM_YIELD_EVERY items.
+   */
+  async *stream(opts: { budgetMs?: number } = {}): AsyncIterableIterator<T> {
+    const lease = await this.leases.acquireReadLease(opts);
+    try {
+      let sinceYield = 0;
+      for (const s of this.source()) {
+        if (lease.expired)
+          throw new AtlasError('TIMEOUT', 'read lease budget exhausted mid-stream');
+        yield s.value;
+        if (++sinceYield >= STREAM_YIELD_EVERY) {
+          sinceYield = 0;
+          await new Promise((r) => setImmediate(r));
+          if (lease.expired)
+            throw new AtlasError('TIMEOUT', 'read lease budget exhausted mid-stream');
+        }
+      }
+    } finally {
+      lease.release();
+    }
+  }
+
+  /** Internal: raw step iterator. */
   steps(): IterableIterator<Step<T>> {
     return this.source();
   }
 }
 
 export class NodeTraversal extends BaseTraversal<NodeRecord> {
-  static fromIds(store: GraphStore, ids: () => Iterable<number>): NodeTraversal {
-    return new NodeTraversal(store, function* () {
+  static fromIds(
+    store: GraphStore,
+    leases: LeaseProvider,
+    ids: () => Iterable<number>,
+  ): NodeTraversal {
+    return new NodeTraversal(store, leases, function* () {
       for (const id of ids()) {
         const n = store.getNode(id);
         if (n) yield { value: n, path: { nodes: [n], edges: [] } };
@@ -147,12 +185,12 @@ export class NodeTraversal extends BaseTraversal<NodeRecord> {
   }
 
   protected clone(source: Source<NodeRecord>): this {
-    return new NodeTraversal(this.store, source) as this;
+    return new NodeTraversal(this.store, this.leases, source) as this;
   }
 
   private hop(dir: 'out' | 'in' | 'both', type?: string): NodeTraversal {
-    const { store, source } = this;
-    return new NodeTraversal(store, function* () {
+    const { store, leases, source } = this;
+    return new NodeTraversal(store, leases, function* () {
       for (const s of source()) {
         const hops: { edge: EdgeRecord; nextId: number }[] = [];
         if (dir !== 'in')
@@ -183,8 +221,8 @@ export class NodeTraversal extends BaseTraversal<NodeRecord> {
   }
 
   outE(type?: string): EdgeTraversal {
-    const { store, source } = this;
-    return new EdgeTraversal(store, function* () {
+    const { store, leases, source } = this;
+    return new EdgeTraversal(store, leases, function* () {
       for (const s of source())
         for (const e of store.outEdges(s.value.id, type))
           yield { value: e, path: { nodes: s.path.nodes, edges: [...s.path.edges, e] } };
@@ -192,8 +230,8 @@ export class NodeTraversal extends BaseTraversal<NodeRecord> {
   }
 
   inE(type?: string): EdgeTraversal {
-    const { store, source } = this;
-    return new EdgeTraversal(store, function* () {
+    const { store, leases, source } = this;
+    return new EdgeTraversal(store, leases, function* () {
       for (const s of source())
         for (const e of store.inEdges(s.value.id, type))
           yield { value: e, path: { nodes: s.path.nodes, edges: [...s.path.edges, e] } };
@@ -202,12 +240,12 @@ export class NodeTraversal extends BaseTraversal<NodeRecord> {
 }
 
 export class EdgeTraversal extends BaseTraversal<EdgeRecord> {
-  constructor(store: GraphStore, source: Source<EdgeRecord>) {
-    super(store, source);
+  constructor(store: GraphStore, leases: LeaseProvider, source: Source<EdgeRecord>) {
+    super(store, leases, source);
   }
 
   protected clone(source: Source<EdgeRecord>): this {
-    return new EdgeTraversal(this.store, source) as this;
+    return new EdgeTraversal(this.store, this.leases, source) as this;
   }
 
   /** Hop to each edge's source node. */
@@ -221,8 +259,8 @@ export class EdgeTraversal extends BaseTraversal<EdgeRecord> {
   }
 
   private endpoint(side: 'from' | 'to'): NodeTraversal {
-    const { store, source } = this;
-    return new NodeTraversal(store, function* () {
+    const { store, leases, source } = this;
+    return new NodeTraversal(store, leases, function* () {
       for (const s of source()) {
         const n = store.getNode(s.value[side])!;
         yield { value: n, path: { nodes: [...s.path.nodes, n], edges: s.path.edges } };
@@ -232,19 +270,22 @@ export class EdgeTraversal extends BaseTraversal<EdgeRecord> {
 }
 
 export class GraphView {
-  constructor(private readonly store: GraphStore) {}
+  constructor(
+    private readonly store: GraphStore,
+    private readonly leases: LeaseProvider,
+  ) {}
 
   /** All nodes, or all nodes with the given label (served by the label index). */
   nodes(label?: string): NodeTraversal {
     const store = this.store;
-    return NodeTraversal.fromIds(store, () =>
+    return NodeTraversal.fromIds(store, this.leases, () =>
       label === undefined ? store.nodes.keys() : store.nodeIdsByLabel(label),
     );
   }
 
   /** Single-node source; empty if the id does not exist. */
   node(id: number): NodeTraversal {
-    return NodeTraversal.fromIds(this.store, () => [id]);
+    return NodeTraversal.fromIds(this.store, this.leases, () => [id]);
   }
 
   /**
@@ -255,9 +296,11 @@ export class GraphView {
   nodesWhere(label: string, property: string, q: ScalarValue | RangeQuery): NodeTraversal {
     const store = this.store;
     if (typeof q === 'object' && !(q instanceof Date)) {
-      return NodeTraversal.fromIds(store, () => store.indexes.lookupRange(label, property, q));
+      return NodeTraversal.fromIds(store, this.leases, () =>
+        store.indexes.lookupRange(label, property, q),
+      );
     }
-    return NodeTraversal.fromIds(store, () => {
+    return NodeTraversal.fromIds(store, this.leases, () => {
       const ids = store.indexes.lookupExact(label, property, q);
       // Message must stay in sync with IndexRegistry.lookupRange, which throws
       // the same NOT_FOUND for the range branch above.
@@ -275,7 +318,7 @@ export class GraphView {
     opts: { prefix?: boolean } = {},
   ): NodeTraversal {
     const store = this.store;
-    return NodeTraversal.fromIds(store, () => {
+    return NodeTraversal.fromIds(store, this.leases, () => {
       const ids = store.indexes.searchText(label, property, query, opts);
       if (ids === undefined)
         throw new AtlasError('NOT_FOUND', `no fulltext index on ${label}.${property}`);
