@@ -70,29 +70,11 @@ describe('multi-pattern joins', () => {
   });
 
   it('repeated node variable inside one pattern must re-match the same node', () => {
-    const r = run(`MATCH (s)-[:REL]->(m)-[:REL]->(e)-[:REL]->(s) RETURN s.k, m.k, e.k`);
-    // What this case PINS: the closing -[:REL]->(s) re-binds the same start node
-    // (verified below — every row's third hop lands back on its own s).
-    //
-    // SPEC DEVIATION (flagged to orchestrator, awaiting ratification): the plan
-    // (line 2527) hand-derives `[['a','b','c']]` calling it "the only 3-cycle".
-    // That value is unreachable for THIS query: `(s)` is anonymous, so the planner
-    // emits an AllNodesScan and tries every node as the start (verified: the plan
-    // root is AllNodesScan over s). The single directed 3-cycle a->b->c->a is
-    // therefore enumerated once per cycle member, yielding three rotational
-    // bindings of (s,m,e). Collapsing them to one row would require a
-    // cycle-rotation-canonicalization step that is NOT in the plan's documented
-    // v1 semantics list (line 2878) and would silently drop two valid bindings —
-    // i.e. it cannot be done without inventing undocumented (and unsound)
-    // semantics. Per Step 3 ("if no sound fix exists … escalate"), this asserts
-    // the executor's actual, verifiable output and the deviation is surfaced as a
-    // concern rather than masked by a fabricated assertion or a hacked exec.ts.
-    expect([...r.rows.map((row) => (row as string[]).join(''))].sort()).toEqual([
-      'abc',
-      'bca',
-      'cab',
-    ]);
-    // The re-match invariant itself: every row closes back onto its own start.
-    for (const row of r.rows) expect(row).toHaveLength(3);
+    // Anchor the start node `(s:V {k:'a'})` so the planner emits an IndexSeek
+    // from the single node `a` (orchestrator decision: option (b) of the Task 8
+    // review). The closing -[:REL]->(s) must re-bind that same anchored start,
+    // so the single directed 3-cycle a->b->c->a yields exactly one binding.
+    const r = run(`MATCH (s:V {k: 'a'})-[:REL]->(m)-[:REL]->(e)-[:REL]->(s) RETURN s.k, m.k, e.k`);
+    expect(r.rows).toEqual([['a', 'b', 'c']]); // the only 3-cycle
   });
 });
