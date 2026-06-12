@@ -65,6 +65,14 @@ export class AtlasDatabase {
     return (this.algoFacade ??= new AlgoFacade(this.store, this));
   }
 
+  /**
+   * Read-only handle to the committed store, for query engines layered on
+   * core (@atlas/query). Mutating through it bypasses the WAL — never write.
+   */
+  get graphStore(): GraphStore {
+    return this.store;
+  }
+
   static async open(dir: string, opts: OpenOptions = {}): Promise<AtlasDatabase> {
     const options: Required<OpenOptions> = {
       fsync: opts.fsync ?? 'always',
