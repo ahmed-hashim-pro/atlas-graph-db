@@ -11,7 +11,10 @@ export async function topoSort(
   opts: { type?: string } = {},
 ): Promise<{ node: NodeId; order: number }[]> {
   const indegree = new Map<NodeId, number>();
-  for (const id of store.nodes.keys()) indegree.set(id, store.inEdges(id, opts.type).length);
+  for (const id of store.nodes.keys()) {
+    await ticker.tick();
+    indegree.set(id, store.inDegree(id, opts.type));
+  }
   const ready = new MinHeap<NodeId>();
   for (const [id, deg] of indegree) if (deg === 0) ready.push(id, id);
   const out: { node: NodeId; order: number }[] = [];

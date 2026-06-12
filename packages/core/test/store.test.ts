@@ -29,6 +29,15 @@ describe('GraphStore creation + adjacency', () => {
     expect(s.stats()).toEqual({ nodeCount: 3, edgeCount: 2 });
   });
 
+  it('counts typed/untyped degree without materializing edge arrays', () => {
+    const s = seeded();
+    expect(s.outDegree(1)).toBe(2);
+    expect(s.outDegree(1, 'KNOWS')).toBe(1);
+    expect(s.inDegree(3, 'WROTE')).toBe(1);
+    expect(s.inDegree(3, 'NOPE')).toBe(0);
+    expect(s.outDegree(3)).toBe(0);
+  });
+
   it('scans nodes by label', () => {
     const s = seeded();
     expect([...s.nodesByLabel('Person')].map((n) => n.id).sort()).toEqual([1, 2]);

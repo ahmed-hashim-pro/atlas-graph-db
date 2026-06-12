@@ -2,7 +2,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { louvain } from '../src/algo/louvain.js';
+import { Ticker } from '../src/algo/runner.js';
 import { openDatabase, type AtlasDatabase } from '../src/database.js';
+import { GraphStore } from '../src/store.js';
 
 let dir: string;
 let db: AtlasDatabase;
@@ -55,4 +58,21 @@ describe('algo.louvain', () => {
     const rows = await db.algo.louvain();
     expect(new Set(rows.map((r) => r.community)).size).toBe(2);
   });
+
+  it('resolves on a large graph without overflowing the call stack', async () => {
+    // Regression: spreading ~200k communities into Math.max(...communities) threw
+    // RangeError (max call stack). localMove now returns a dense `count` instead.
+    const N = 200_000;
+    const store = new GraphStore();
+    for (let i = 0; i < N; i++)
+      store.applyOp({ op: 'createNode', id: i, labels: ['V'], props: {} });
+    // Deterministic ring plus a deterministic chord per node -> ~200k edges, no RNG.
+    for (let i = 0; i < N; i++) {
+      const to = (i * 2 + 1) % N;
+      store.applyOp({ op: 'createEdge', id: i, type: 'R', from: i, to, props: {} });
+    }
+    const ticker = new Ticker({ release() {}, expired: false });
+    const rows = await louvain(store, ticker);
+    expect(rows.length).toBe(N);
+  }, 120_000);
 });
