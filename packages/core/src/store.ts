@@ -164,6 +164,14 @@ export class GraphStore {
     return n;
   }
 
+  outDegree(id: NodeId, type?: string): number {
+    return this.adjCount(this.outAdj, id, type);
+  }
+
+  inDegree(id: NodeId, type?: string): number {
+    return this.adjCount(this.inAdj, id, type);
+  }
+
   *nodesByLabel(label: string): IterableIterator<NodeRecord> {
     for (const id of this.byLabel.get(label) ?? []) yield this.nodes.get(id)!;
   }
@@ -233,6 +241,19 @@ export class GraphStore {
         throw new AtlasError('INTERNAL', `edge ${e.id} has dangling endpoint`);
     this.indexes.checkInvariants(this);
     this.schema.checkInvariants(this);
+  }
+
+  private adjCount(adj: Adjacency, id: NodeId, type?: string): number {
+    const byType = adj.get(id);
+    if (!byType) return 0;
+    if (type !== undefined) {
+      const typeId = this.types.idOf(type);
+      if (typeId === undefined) return 0;
+      return byType.get(typeId)?.size ?? 0;
+    }
+    let n = 0;
+    for (const set of byType.values()) n += set.size;
+    return n;
   }
 
   private collect(adj: Adjacency, id: NodeId, type?: string): EdgeRecord[] {

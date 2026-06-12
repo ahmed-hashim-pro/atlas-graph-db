@@ -43,11 +43,13 @@ export async function louvain(
 
   let mapping = ids.map((_, i) => i); // original index -> current-level node
   for (let l = 0; l < maxLevels; l++) {
-    const { communities, moved } = await localMove(level, m2, ticker);
+    const { communities, moved, count } = await localMove(level, m2, ticker);
     mapping = mapping.map((cur) => communities[cur]!);
     if (!moved) break;
     const prevN = level.adj.length;
-    const k = Math.max(...communities) + 1;
+    // localMove renumbers communities densely from 0, so distinct count === max + 1.
+    // Spreading communities into Math.max overflows the call stack on large graphs.
+    const k = count;
     const next: Level = {
       adj: Array.from({ length: k }, () => new Map()),
       selfW: new Float64Array(k),
@@ -73,7 +75,7 @@ async function localMove(
   level: Level,
   m2: number,
   ticker: Ticker,
-): Promise<{ communities: number[]; moved: boolean }> {
+): Promise<{ communities: number[]; moved: boolean; count: number }> {
   const n = level.adj.length;
   const comm = Array.from({ length: n }, (_, i) => i);
   const degree = new Float64Array(n);
@@ -123,5 +125,5 @@ async function localMove(
     }
     return r;
   });
-  return { communities, moved: movedAny };
+  return { communities, moved: movedAny, count: renumber.size };
 }

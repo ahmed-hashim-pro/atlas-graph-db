@@ -71,8 +71,8 @@ export async function degree(
   for (const id of store.nodes.keys()) {
     await ticker.tick();
     let score = 0;
-    if (direction !== 'in') score += store.outEdges(id).length;
-    if (direction !== 'out') score += store.inEdges(id).length;
+    if (direction !== 'in') score += store.outDegree(id);
+    if (direction !== 'out') score += store.inDegree(id);
     out.push({ node: id, score });
   }
   return out;
