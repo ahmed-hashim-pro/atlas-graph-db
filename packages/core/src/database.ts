@@ -43,11 +43,19 @@ export class AtlasDatabase {
     private walSeq: number,
     private lastTxId: number,
     private readonly opts: Required<OpenOptions>,
-  ) {}
+  ) {
+    // Seed the feed with the recovered txId so a fresh default subscriber's
+    // cursor matches the next commit (otherwise a reopened database would
+    // hand every new subscriber a spurious resync_required on first commit).
+    // Constructed in the body, not a field initializer: under ES2022+
+    // class-field semantics initializers run before parameter properties are
+    // assigned, so they cannot read `lastTxId`.
+    this.feed = new ChangeFeed(1024, lastTxId + 1);
+  }
 
   private readonly queue = new WriteQueue();
 
-  private readonly feed = new ChangeFeed();
+  private readonly feed: ChangeFeed;
 
   static async open(dir: string, opts: OpenOptions = {}): Promise<AtlasDatabase> {
     const options: Required<OpenOptions> = {
@@ -239,7 +247,11 @@ export class AtlasDatabase {
   /**
    * Subscribe to committed batches. Delivery is asynchronous; on overflow the
    * subscriber receives one resync_required and is closed. Cursors are
-   * per-process: after a restart, re-read state and subscribe fresh.
+   * per-process: after a restart, re-read state and subscribe fresh — the
+   * feed is seeded from the recovered txId, so a default subscription resumes
+   * cleanly at the next commit. A handler that throws is logged and its
+   * subscription closed. close() delivers any still-buffered batches and then
+   * closes all subscriptions; no terminal event is emitted.
    */
   subscribe(handler: (e: ChangeEvent) => void, opts: { fromTxId?: number } = {}): () => void {
     return this.feed.subscribe(handler, opts);
@@ -330,6 +342,9 @@ export class AtlasDatabase {
     await this.drainCheckpoints();
     await this.queue.run(() => undefined);
     await this.drainCheckpoints();
+    // Flush buffered batches to subscribers, then end every subscription so
+    // none is left silently dangling (see subscribe() for the contract).
+    this.feed.closeAll();
     await this.wal.close();
   }
 

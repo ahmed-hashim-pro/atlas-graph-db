@@ -20,10 +20,21 @@ interface Subscription {
  */
 export class ChangeFeed {
   private readonly ring: CommittedBatch[] = [];
-  private nextTxId = 1; // txId the NEXT emit is expected to carry
+  /** txId the NEXT emit is expected to carry. */
+  private nextTxId: number;
   private readonly subs = new Set<Subscription>();
 
-  constructor(private readonly capacity = 1024) {}
+  /**
+   * @param startTxId txId the next emit will carry. A database recovered at
+   * lastTxId = N must seed its feed with N + 1 so a fresh default subscriber's
+   * cursor lines up with the first post-recovery commit.
+   */
+  constructor(
+    private readonly capacity = 1024,
+    startTxId = 1,
+  ) {
+    this.nextTxId = startTxId;
+  }
 
   /** Oldest txId still retained, or nextTxId when the ring is empty. */
   private get oldest(): number {
@@ -37,6 +48,11 @@ export class ChangeFeed {
     for (const sub of this.subs) this.schedule(sub);
   }
 
+  /**
+   * Subscribe to the feed. A handler that throws has its subscription closed
+   * (the error is logged, never rethrown), so one misbehaving observer cannot
+   * crash the process or starve other subscribers.
+   */
   subscribe(handler: (e: ChangeEvent) => void, opts: { fromTxId?: number } = {}): () => void {
     const sub: Subscription = {
       handler,
@@ -52,6 +68,19 @@ export class ChangeFeed {
     };
   }
 
+  /**
+   * Synchronously deliver any batches still buffered for each subscriber,
+   * then close every subscription. No terminal event is emitted. Called by
+   * AtlasDatabase.close().
+   */
+  closeAll(): void {
+    for (const sub of [...this.subs]) {
+      this.drain(sub);
+      sub.closed = true;
+    }
+    this.subs.clear();
+  }
+
   private schedule(sub: Subscription): void {
     if (sub.scheduled || sub.closed) return;
     sub.scheduled = true;
@@ -62,17 +91,30 @@ export class ChangeFeed {
   }
 
   private drain(sub: Subscription): void {
-    if (sub.closed) return;
-    if (sub.cursor < this.oldest) {
-      sub.closed = true;
-      this.subs.delete(sub);
-      sub.handler({ type: 'resync_required' });
-      return;
-    }
-    while (sub.cursor < this.nextTxId && !sub.closed) {
+    // The staleness check is re-run every iteration: a handler may re-enter
+    // emit() synchronously and evict the in-flight cursor mid-loop.
+    while (!sub.closed) {
+      if (sub.cursor < this.oldest) {
+        sub.closed = true;
+        this.subs.delete(sub);
+        this.invoke(sub, { type: 'resync_required' });
+        return;
+      }
+      if (sub.cursor >= this.nextTxId) return;
       const batch = this.ring[sub.cursor - this.oldest]!;
       sub.cursor++;
-      sub.handler({ type: 'batch', txId: batch.txId, ops: batch.ops });
+      this.invoke(sub, { type: 'batch', txId: batch.txId, ops: batch.ops });
+    }
+  }
+
+  /** Guarded handler call: a throw closes the subscription, never escapes. */
+  private invoke(sub: Subscription, event: ChangeEvent): void {
+    try {
+      sub.handler(event);
+    } catch (err) {
+      sub.closed = true;
+      this.subs.delete(sub);
+      console.error('[atlas] change feed handler threw; subscription closed', err);
     }
   }
 }
