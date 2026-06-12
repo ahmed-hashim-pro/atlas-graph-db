@@ -1,6 +1,7 @@
 import type { GraphStore } from '../store.js';
 import type { LeaseProvider } from '../traversal/traversal.js';
 import type { NodeId } from '../types.js';
+import { components, type ComponentsOptions } from './components.js';
 import { withAlgoLease, type AlgoOptions, type Direction, type PathResult } from './runner.js';
 import {
   allShortestPaths,
@@ -43,5 +44,11 @@ export class AlgoFacade {
     opts: { from: NodeId; to: NodeId; type?: string } & AlgoOptions,
   ): Promise<{ path: PathResult; cost: number }[]> {
     return withAlgoLease(this.leases, opts, (t) => allShortestPaths(this.store, t, opts));
+  }
+
+  components(
+    opts: ComponentsOptions & AlgoOptions = {},
+  ): Promise<{ node: NodeId; component: number }[]> {
+    return withAlgoLease(this.leases, opts, (t) => components(this.store, t, opts));
   }
 }
