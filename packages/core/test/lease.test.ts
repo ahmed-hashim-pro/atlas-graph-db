@@ -20,9 +20,11 @@ describe('read leases', () => {
     await db.transact((tx) => void tx.createNode(['A'], {}));
     const lease = await db.acquireReadLease();
     let committed = false;
-    const write = db.transact((tx) => void tx.createNode(['A'], {})).then(() => {
-      committed = true;
-    });
+    const write = db
+      .transact((tx) => void tx.createNode(['A'], {}))
+      .then(() => {
+        committed = true;
+      });
     await sleep(30);
     expect(committed).toBe(false); // write is buffered behind the lease
     expect(db.stats().nodeCount).toBe(1); // reads unaffected
