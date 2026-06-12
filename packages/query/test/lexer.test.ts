@@ -8,7 +8,9 @@ function kinds(src: string): string[] {
 
 describe('lex', () => {
   it('tokenizes a representative read query with positions', () => {
-    const toks = lex("MATCH (p:Person)-[:WROTE]->(d)\nWHERE d.year >= 1840\nRETURN p.name AS author");
+    const toks = lex(
+      'MATCH (p:Person)-[:WROTE]->(d)\nWHERE d.year >= 1840\nRETURN p.name AS author',
+    );
     expect(toks.at(-1)!.type).toBe('eof');
     const where = toks.find((t) => t.value === 'WHERE')!;
     expect(where.type).toBe('keyword');
@@ -49,12 +51,9 @@ describe('lex', () => {
   });
 
   it('skips // comments to end of line', () => {
-    expect(kinds('RETURN 1 // trailing\n// whole line\nRETURN 2').filter((k) => k !== 'eof:')).toEqual([
-      'keyword:RETURN',
-      'number:1',
-      'keyword:RETURN',
-      'number:2',
-    ]);
+    expect(
+      kinds('RETURN 1 // trailing\n// whole line\nRETURN 2').filter((k) => k !== 'eof:'),
+    ).toEqual(['keyword:RETURN', 'number:1', 'keyword:RETURN', 'number:2']);
   });
 
   it('reports bad characters and unterminated strings with positions', () => {

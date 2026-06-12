@@ -5,7 +5,11 @@ import { evalExpr, type Binding } from '../src/eval.js';
 import { lex } from '../src/lexer.js';
 import { TokenStream, parseExpression } from '../src/parser.js';
 
-const ada: NodeRecord = { id: 1, labels: ['Person'], props: { name: 'Ada', born: 1815, tags: ['math'] } };
+const ada: NodeRecord = {
+  id: 1,
+  labels: ['Person'],
+  props: { name: 'Ada', born: 1815, tags: ['math'] },
+};
 const blank: NodeRecord = { id: 2, labels: ['Person'], props: {} };
 
 function run(src: string, binding: Binding = new Map([['p', ada]]), params = {}): unknown {

@@ -10,13 +10,50 @@ export interface Token {
 }
 
 const KEYWORDS = new Set([
-  'MATCH', 'WHERE', 'RETURN', 'AS', 'DISTINCT', 'ORDER', 'BY', 'SKIP', 'LIMIT',
-  'ASC', 'DESC', 'AND', 'OR', 'NOT', 'IN', 'CONTAINS', 'STARTS', 'ENDS', 'WITH',
-  'EXISTS', 'NULL', 'TRUE', 'FALSE', 'EXPLAIN',
+  'MATCH',
+  'WHERE',
+  'RETURN',
+  'AS',
+  'DISTINCT',
+  'ORDER',
+  'BY',
+  'SKIP',
+  'LIMIT',
+  'ASC',
+  'DESC',
+  'AND',
+  'OR',
+  'NOT',
+  'IN',
+  'CONTAINS',
+  'STARTS',
+  'ENDS',
+  'WITH',
+  'EXISTS',
+  'NULL',
+  'TRUE',
+  'FALSE',
+  'EXPLAIN',
 ]);
 
 const MULTI_PUNCTS = ['<=', '>=', '<>', '->', '<-', '..'];
-const SINGLE_PUNCTS = new Set(['(', ')', '[', ']', '{', '}', ':', ',', '.', '=', '<', '>', '-', '*', '|']);
+const SINGLE_PUNCTS = new Set([
+  '(',
+  ')',
+  '[',
+  ']',
+  '{',
+  '}',
+  ':',
+  ',',
+  '.',
+  '=',
+  '<',
+  '>',
+  '-',
+  '*',
+  '|',
+]);
 const IDENT_START = /[A-Za-z_]/;
 const IDENT_PART = /[A-Za-z0-9_]/;
 const ESCAPES: Record<string, string> = { n: '\n', t: '\t', '\\': '\\', "'": "'", '"': '"' };
@@ -69,7 +106,8 @@ export function lex(source: string): Token[] {
     }
     if (ch === '$') {
       let j = i + 1;
-      if (j >= source.length || !IDENT_START.test(source[j]!)) fail('expected parameter name after "$"');
+      if (j >= source.length || !IDENT_START.test(source[j]!))
+        fail('expected parameter name after "$"');
       while (j < source.length && IDENT_PART.test(source[j]!)) j++;
       const name = source.slice(i + 1, j);
       advance(j - i);
@@ -80,7 +118,12 @@ export function lex(source: string): Token[] {
       let j = i;
       while (j < source.length && source[j]! >= '0' && source[j]! <= '9') j++;
       // ".." after a number is a range punct, not a decimal point.
-      if (source[j] === '.' && source[j + 1] !== '.' && source[j + 1]! >= '0' && source[j + 1]! <= '9') {
+      if (
+        source[j] === '.' &&
+        source[j + 1] !== '.' &&
+        source[j + 1]! >= '0' &&
+        source[j + 1]! <= '9'
+      ) {
         j++;
         while (j < source.length && source[j]! >= '0' && source[j]! <= '9') j++;
       }
@@ -97,7 +140,8 @@ export function lex(source: string): Token[] {
         const c = source[j]!;
         if (c === '\\') {
           const esc = ESCAPES[source[j + 1] ?? ''];
-          if (esc === undefined) fail(`unknown escape "\\${source[j + 1] ?? ''}"`, startLine, startCol);
+          if (esc === undefined)
+            fail(`unknown escape "\\${source[j + 1] ?? ''}"`, startLine, startCol);
           out += esc;
           j += 2;
           continue;

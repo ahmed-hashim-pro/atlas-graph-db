@@ -77,6 +77,6 @@ describe('parseQuery — semantic validation', () => {
   });
 
   it('rejects writes (M4b scope) as parse errors', () => {
-    expect(err("CREATE (n:X) RETURN n").code).toBe('PARSE_ERROR');
+    expect(err('CREATE (n:X) RETURN n').code).toBe('PARSE_ERROR');
   });
 });

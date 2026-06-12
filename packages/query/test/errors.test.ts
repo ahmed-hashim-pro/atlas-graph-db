@@ -14,8 +14,12 @@ describe('renderSnippet', () => {
 
 describe('AqlError', () => {
   it('carries code, message, position, and a built snippet', () => {
-    const e = new AqlError('PARSE_ERROR', 'unexpected token ">>"', { line: 2, column: 14 },
-      'MATCH (p)\nWHERE p.x >> 1\nRETURN p');
+    const e = new AqlError(
+      'PARSE_ERROR',
+      'unexpected token ">>"',
+      { line: 2, column: 14 },
+      'MATCH (p)\nWHERE p.x >> 1\nRETURN p',
+    );
     expect(e.code).toBe('PARSE_ERROR');
     expect(e.line).toBe(2);
     expect(e.column).toBe(14);

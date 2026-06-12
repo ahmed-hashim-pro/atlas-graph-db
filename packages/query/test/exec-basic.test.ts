@@ -33,7 +33,11 @@ afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-function run(src: string, params: Record<string, unknown> = {}, opts: { maxRows?: number; timeoutMs?: number } = {}) {
+function run(
+  src: string,
+  params: Record<string, unknown> = {},
+  opts: { maxRows?: number; timeoutMs?: number } = {},
+) {
   const { query } = parseQuery(src);
   const plan = planQuery(query, db.graphStore);
   return runRead(plan, query, db.graphStore, {
@@ -78,7 +82,9 @@ describe('runRead — basics', () => {
   });
 
   it('WHERE with params; missing label/prop yields empty', () => {
-    expect(run('MATCH (p:Person) WHERE p.born > $y RETURN p.name', { y: 1800 }).rows).toHaveLength(2);
+    expect(run('MATCH (p:Person) WHERE p.born > $y RETURN p.name', { y: 1800 }).rows).toHaveLength(
+      2,
+    );
     expect(run('MATCH (p:Ghost) RETURN p').rows).toEqual([]);
   });
 

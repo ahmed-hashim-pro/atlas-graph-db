@@ -20,7 +20,9 @@ export interface EvalContext {
 }
 
 function isRecord(v: RuntimeValue): v is NodeRecord | EdgeRecord {
-  return typeof v === 'object' && v !== null && !Array.isArray(v) && !(v instanceof Date) && 'id' in v;
+  return (
+    typeof v === 'object' && v !== null && !Array.isArray(v) && !(v instanceof Date) && 'id' in v
+  );
 }
 
 /** Type-strict equality; null never equals anything (including null). */
@@ -115,7 +117,12 @@ export function evalExpr(e: Expr, binding: Binding, ctx: EvalContext): RuntimeVa
         );
       const arg = e.arg === '*' ? null : evalExpr(e.arg, binding, ctx);
       if (arg === null || !isRecord(arg))
-        throw new AqlError('RUNTIME_ERROR', `${e.func}() expects a bound variable`, e.pos, ctx.source);
+        throw new AqlError(
+          'RUNTIME_ERROR',
+          `${e.func}() expects a bound variable`,
+          e.pos,
+          ctx.source,
+        );
       if (e.func === 'id') return arg.id;
       if (e.func === 'labels') {
         if (!('labels' in arg))

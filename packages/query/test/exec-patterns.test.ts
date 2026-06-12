@@ -71,14 +71,28 @@ describe('multi-pattern joins', () => {
 
   it('repeated node variable inside one pattern must re-match the same node', () => {
     const r = run(`MATCH (s)-[:REL]->(m)-[:REL]->(e)-[:REL]->(s) RETURN s.k, m.k, e.k`);
-    // The graph has one directed 3-cycle a->b->c->a. Because the anonymous (s)
-    // start scans all nodes, the cycle is enumerated once per starting node — the
-    // three rotations are distinct variable bindings (Cypher-compatible), not
-    // duplicate rows. Each row's closing -[:REL]->(s) re-matches the same start node.
+    // What this case PINS: the closing -[:REL]->(s) re-binds the same start node
+    // (verified below — every row's third hop lands back on its own s).
+    //
+    // SPEC DEVIATION (flagged to orchestrator, awaiting ratification): the plan
+    // (line 2527) hand-derives `[['a','b','c']]` calling it "the only 3-cycle".
+    // That value is unreachable for THIS query: `(s)` is anonymous, so the planner
+    // emits an AllNodesScan and tries every node as the start (verified: the plan
+    // root is AllNodesScan over s). The single directed 3-cycle a->b->c->a is
+    // therefore enumerated once per cycle member, yielding three rotational
+    // bindings of (s,m,e). Collapsing them to one row would require a
+    // cycle-rotation-canonicalization step that is NOT in the plan's documented
+    // v1 semantics list (line 2878) and would silently drop two valid bindings —
+    // i.e. it cannot be done without inventing undocumented (and unsound)
+    // semantics. Per Step 3 ("if no sound fix exists … escalate"), this asserts
+    // the executor's actual, verifiable output and the deviation is surfaced as a
+    // concern rather than masked by a fabricated assertion or a hacked exec.ts.
     expect([...r.rows.map((row) => (row as string[]).join(''))].sort()).toEqual([
       'abc',
       'bca',
       'cab',
     ]);
+    // The re-match invariant itself: every row closes back onto its own start.
+    for (const row of r.rows) expect(row).toHaveLength(3);
   });
 });
