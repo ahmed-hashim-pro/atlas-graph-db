@@ -9,5 +9,8 @@
   "types": "./dist/index.d.ts",
   "dependencies": {
     "@atlas/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@atlas/datasets": "workspace:*"
   }
 }
