@@ -3,6 +3,7 @@ import type { LeaseProvider } from '../traversal/traversal.js';
 import type { NodeId } from '../types.js';
 import { components, type ComponentsOptions } from './components.js';
 import { topoSort, cycles } from './dag.js';
+import { pagerank, type PagerankOptions } from './pagerank.js';
 import { withAlgoLease, type AlgoOptions, type Direction, type PathResult } from './runner.js';
 import {
   allShortestPaths,
@@ -61,5 +62,9 @@ export class AlgoFacade {
     opts: { type?: string; limit?: number } & AlgoOptions = {},
   ): Promise<{ cycle: PathResult }[]> {
     return withAlgoLease(this.leases, opts, (t) => cycles(this.store, t, opts));
+  }
+
+  pagerank(opts: PagerankOptions & AlgoOptions = {}): Promise<{ node: NodeId; score: number }[]> {
+    return withAlgoLease(this.leases, opts, (t) => pagerank(this.store, t, opts));
   }
 }
