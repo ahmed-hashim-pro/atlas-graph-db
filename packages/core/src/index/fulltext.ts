@@ -27,6 +27,11 @@ export class FulltextIndex {
     return this.postings.size;
   }
 
+  /** Token -> per-node occurrence counts. Read-only introspection for invariant checks. */
+  *postingEntries(): IterableIterator<[string, ReadonlyMap<NodeId, number>]> {
+    yield* this.postings.entries();
+  }
+
   add(value: PropertyValue, id: NodeId): void {
     const text = textOf(value);
     if (text === null) return;

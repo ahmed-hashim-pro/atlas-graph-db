@@ -231,6 +231,8 @@ export class GraphStore {
     for (const e of this.edges.values())
       if (!this.nodes.has(e.from) || !this.nodes.has(e.to))
         throw new AtlasError('INTERNAL', `edge ${e.id} has dangling endpoint`);
+    this.indexes.checkInvariants(this);
+    this.schema.checkInvariants(this);
   }
 
   private collect(adj: Adjacency, id: NodeId, type?: string): EdgeRecord[] {

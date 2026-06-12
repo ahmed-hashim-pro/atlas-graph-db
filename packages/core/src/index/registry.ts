@@ -262,6 +262,63 @@ export class IndexRegistry {
     }
   }
 
+  /**
+   * Recompute-and-compare deep check: every entry's postings must equal what
+   * a fresh backfill over the store would produce. O(nodes x defs) — used by
+   * tests and the property/crash suites, not the hot path.
+   */
+  checkInvariants(store: GraphStore): void {
+    for (const entry of this.entries.values()) {
+      const { def } = entry;
+      if (entry.property) {
+        const expected = new PropertyIndex();
+        for (const n of store.nodesByLabel(def.label)) {
+          const v = n.props[def.property];
+          if (v !== undefined) expected.add(v, n.id);
+        }
+        if (expected.size !== entry.property.size)
+          throw new AtlasError(
+            'INTERNAL',
+            `index ${indexDefKey(def)}: ${entry.property.size} postings, expected ${expected.size}`,
+          );
+        for (const n of store.nodesByLabel(def.label)) {
+          const v = n.props[def.property];
+          if (v === undefined || !isScalar(v)) continue;
+          if (!entry.property.getExact(v)?.has(n.id))
+            throw new AtlasError(
+              'INTERNAL',
+              `index ${indexDefKey(def)}: missing posting for node ${n.id}`,
+            );
+        }
+      }
+      if (entry.fulltext) {
+        const expected = new FulltextIndex();
+        for (const n of store.nodesByLabel(def.label)) {
+          const v = n.props[def.property];
+          if (v !== undefined) expected.add(v, n.id);
+        }
+        const live = new Map([...entry.fulltext.postingEntries()]);
+        const want = new Map([...expected.postingEntries()]);
+        if (live.size !== want.size)
+          throw new AtlasError(
+            'INTERNAL',
+            `fulltext ${indexDefKey(def)}: ${live.size} tokens, expected ${want.size}`,
+          );
+        for (const [token, wantNodes] of want) {
+          const liveNodes = live.get(token);
+          if (!liveNodes || liveNodes.size !== wantNodes.size)
+            throw new AtlasError('INTERNAL', `fulltext ${indexDefKey(def)}: token "${token}" postings diverge`);
+          for (const [id, count] of wantNodes)
+            if (liveNodes.get(id) !== count)
+              throw new AtlasError(
+                'INTERNAL',
+                `fulltext ${indexDefKey(def)}: token "${token}" count diverges for node ${id}`,
+              );
+        }
+      }
+    }
+  }
+
   private scalarIndex(label: string, property: string): PropertyIndex | undefined {
     return (
       this.entries.get(indexDefKey({ kind: 'property', label, property }))?.property ??

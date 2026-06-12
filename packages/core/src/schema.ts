@@ -1,3 +1,4 @@
+import { AtlasError } from './errors.js';
 import type { GraphStore } from './store.js';
 import type { Op, PropertyValue } from './types.js';
 
@@ -153,6 +154,25 @@ export class SchemaTracker {
           to: s.to.toRecord(),
         })),
     };
+  }
+
+  /**
+   * Rebuild-and-compare deep check: replaying the store's current contents
+   * through a fresh tracker must reproduce this tracker's summary exactly.
+   */
+  checkInvariants(store: GraphStore): void {
+    const fresh = new SchemaTracker();
+    for (const n of store.nodes.values())
+      fresh.beforeApply({ op: 'createNode', id: n.id, labels: n.labels, props: n.props }, store);
+    for (const e of store.edges.values())
+      fresh.beforeApply(
+        { op: 'createEdge', id: e.id, type: e.type, from: e.from, to: e.to, props: e.props },
+        store,
+      );
+    const live = JSON.stringify(this.summary());
+    const want = JSON.stringify(fresh.summary());
+    if (live !== want)
+      throw new AtlasError('INTERNAL', `schema counters diverge from store contents: ${live} != ${want}`);
   }
 
   private labelStats(label: string): LabelStats {
