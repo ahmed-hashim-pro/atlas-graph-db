@@ -1,3 +1,6 @@
+import { AtlasError } from '../errors.js';
+import type { ScalarValue } from '../index/keys.js';
+import type { RangeQuery } from '../index/property-index.js';
 import type { GraphStore } from '../store.js';
 import type { EdgeRecord, NodeRecord, Props } from '../types.js';
 
@@ -241,5 +244,39 @@ export class GraphView {
   /** Single-node source; empty if the id does not exist. */
   node(id: number): NodeTraversal {
     return NodeTraversal.fromIds(this.store, () => [id]);
+  }
+
+  /**
+   * Index-backed source. Pass a scalar for exact match or a RangeQuery
+   * ({gt/gte/lt/lte}) for ranges. Throws NOT_FOUND when (label, property) has
+   * no scalar index — explicit beats a silent full scan.
+   */
+  nodesWhere(label: string, property: string, q: ScalarValue | RangeQuery): NodeTraversal {
+    const store = this.store;
+    if (typeof q === 'object' && !(q instanceof Date)) {
+      return NodeTraversal.fromIds(store, () => store.indexes.lookupRange(label, property, q));
+    }
+    return NodeTraversal.fromIds(store, () => {
+      const ids = store.indexes.lookupExact(label, property, q);
+      if (ids === undefined)
+        throw new AtlasError('NOT_FOUND', `no property index on ${label}.${property}`);
+      return ids;
+    });
+  }
+
+  /** Fulltext-backed source. Throws NOT_FOUND when (label, property) has no fulltext index. */
+  search(
+    label: string,
+    property: string,
+    query: string,
+    opts: { prefix?: boolean } = {},
+  ): NodeTraversal {
+    const store = this.store;
+    return NodeTraversal.fromIds(store, () => {
+      const ids = store.indexes.searchText(label, property, query, opts);
+      if (ids === undefined)
+        throw new AtlasError('NOT_FOUND', `no fulltext index on ${label}.${property}`);
+      return ids;
+    });
   }
 }
