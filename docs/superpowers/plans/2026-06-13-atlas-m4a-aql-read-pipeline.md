@@ -2523,8 +2523,11 @@ describe('multi-pattern joins', () => {
   });
 
   it('repeated node variable inside one pattern must re-match the same node', () => {
-    // Anchored start (orchestrator decision below): IndexSeek from the single
-    // node `a` yields exactly one binding of the directed 3-cycle a->b->c->a.
+    // Anchored start (orchestrator decision below): no (V, k) index exists, so the
+    // planner narrows the start via LabelScan(V) + Filter(s.k='a') to the single
+    // node `a`. The closing -[:REL]->(s) re-binds that same node via the
+    // executor's boundTo re-match check, so the directed 3-cycle a->b->c->a yields
+    // exactly one binding.
     const r = run(`MATCH (s:V {k: 'a'})-[:REL]->(m)-[:REL]->(e)-[:REL]->(s) RETURN s.k, m.k, e.k`);
     expect(r.rows).toEqual([['a', 'b', 'c']]); // the only 3-cycle
   });
@@ -2536,11 +2539,16 @@ describe('multi-pattern joins', () => {
 > the planner emitted an AllNodesScan and enumerated the single directed 3-cycle
 > once per cycle member — three rotational bindings of `(s,m,e)`, not the
 > hand-derived `[['a','b','c']]`. The implementer correctly surfaced this. Per
-> the review, **option (b) is ratified**: anchor the start with `(s:V {k:'a'})`
-> so an IndexSeek begins from a fixed node and the closing `-[:REL]->(s)`
-> re-match yields exactly one binding `[['a','b','c']]` — preserving the
-> spec-literal expected value and the re-match invariant the case was pinning.
-> No rotation-non-deduplication semantics are introduced.
+> the review, the fix is to **anchor the start with `(s:V {k:'a'})`**. The
+> fixture creates no scalar index on (V, k), so the planner narrows the start via
+> `LabelScan(V) + Filter(s.k='a')` to the single matching node `a` (verified by
+> dumping `serializePlan` — it is LabelScan+Filter, not an IndexSeek; an
+> IndexSeek would only appear if a property/unique index on (V, k) existed). The
+> closing `-[:REL]->(s)` then re-binds that same anchored node via the executor's
+> `boundTo` re-match check (`exec.ts`), which behaves identically under LabelScan
+> and IndexSeek. This yields exactly one binding `[['a','b','c']]` — preserving
+> the spec-literal expected value and the re-match invariant the case was
+> pinning. No rotation-non-deduplication semantics are introduced.
 
 - [ ] **Step 2: Write the aggregate tests**
 
