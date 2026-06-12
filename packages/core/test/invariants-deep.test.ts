@@ -7,8 +7,18 @@ function seeded(): GraphStore {
   s.applyOp({ op: 'createIndex', def: { kind: 'property', label: 'P', property: 'v' } });
   s.applyOp({ op: 'createIndex', def: { kind: 'fulltext', label: 'P', property: 'text' } });
   s.applyOp({ op: 'createIndex', def: { kind: 'unique', label: 'P', property: 'u' } });
-  s.applyOp({ op: 'createNode', id: 1, labels: ['P'], props: { v: 5, text: 'graph theory', u: 'a' } });
-  s.applyOp({ op: 'createNode', id: 2, labels: ['P'], props: { v: 7, text: 'graph algebra', u: 'b' } });
+  s.applyOp({
+    op: 'createNode',
+    id: 1,
+    labels: ['P'],
+    props: { v: 5, text: 'graph theory', u: 'a' },
+  });
+  s.applyOp({
+    op: 'createNode',
+    id: 2,
+    labels: ['P'],
+    props: { v: 7, text: 'graph algebra', u: 'b' },
+  });
   s.applyOp({ op: 'createEdge', id: 1, type: 'T', from: 1, to: 2, props: {} });
   return s;
 }
@@ -40,10 +50,7 @@ describe('deep invariants', () => {
     const entries = [...s.indexes.defs()];
     expect(entries.some((d) => d.kind === 'fulltext')).toBe(true);
     // Corrupt via the maintenance API itself: double-remove leaves postings short.
-    s.indexes.beforeApply(
-      { op: 'setNodeProps', id: 2, set: {}, remove: ['text'] },
-      s,
-    );
+    s.indexes.beforeApply({ op: 'setNodeProps', id: 2, set: {}, remove: ['text'] }, s);
     expect(() => s.checkInvariants()).toThrow(/fulltext|index/);
   });
 

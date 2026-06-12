@@ -14,7 +14,10 @@ export async function components(
   return (opts.mode ?? 'weak') === 'weak' ? weak(store, ticker) : strong(store, ticker);
 }
 
-async function weak(store: GraphStore, ticker: Ticker): Promise<{ node: NodeId; component: number }[]> {
+async function weak(
+  store: GraphStore,
+  ticker: Ticker,
+): Promise<{ node: NodeId; component: number }[]> {
   const assigned = new Map<NodeId, number>();
   let comp = 0;
   for (const root of store.nodes.keys()) {
@@ -36,7 +39,10 @@ async function weak(store: GraphStore, ticker: Ticker): Promise<{ node: NodeId; 
 }
 
 /** Iterative Tarjan — explicit frames, no recursion (1M-node graphs would blow the call stack). */
-async function strong(store: GraphStore, ticker: Ticker): Promise<{ node: NodeId; component: number }[]> {
+async function strong(
+  store: GraphStore,
+  ticker: Ticker,
+): Promise<{ node: NodeId; component: number }[]> {
   const index = new Map<NodeId, number>();
   const low = new Map<NodeId, number>();
   const onStack = new Set<NodeId>();

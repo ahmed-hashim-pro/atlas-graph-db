@@ -7,11 +7,7 @@ import { topoSort, cycles } from './dag.js';
 import { louvain, type LouvainOptions } from './louvain.js';
 import { pagerank, type PagerankOptions } from './pagerank.js';
 import { withAlgoLease, type AlgoOptions, type Direction, type PathResult } from './runner.js';
-import {
-  allShortestPaths,
-  shortestPath,
-  type ShortestPathOptions,
-} from './shortest-path.js';
+import { allShortestPaths, shortestPath, type ShortestPathOptions } from './shortest-path.js';
 import { bfs, dfs, degree, type TraverseOptions } from './traverse.js';
 
 /**
@@ -34,7 +30,9 @@ export class AlgoFacade {
     return withAlgoLease(this.leases, opts, (t) => dfs(this.store, t, opts));
   }
 
-  degree(opts: { direction?: Direction } & AlgoOptions = {}): Promise<{ node: NodeId; score: number }[]> {
+  degree(
+    opts: { direction?: Direction } & AlgoOptions = {},
+  ): Promise<{ node: NodeId; score: number }[]> {
     return withAlgoLease(this.leases, opts, (t) => degree(this.store, t, opts));
   }
 

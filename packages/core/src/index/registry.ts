@@ -307,7 +307,10 @@ export class IndexRegistry {
         for (const [token, wantNodes] of want) {
           const liveNodes = live.get(token);
           if (!liveNodes || liveNodes.size !== wantNodes.size)
-            throw new AtlasError('INTERNAL', `fulltext ${indexDefKey(def)}: token "${token}" postings diverge`);
+            throw new AtlasError(
+              'INTERNAL',
+              `fulltext ${indexDefKey(def)}: token "${token}" postings diverge`,
+            );
           for (const [id, count] of wantNodes)
             if (liveNodes.get(id) !== count)
               throw new AtlasError(

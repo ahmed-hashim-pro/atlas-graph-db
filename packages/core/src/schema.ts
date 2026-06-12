@@ -172,7 +172,10 @@ export class SchemaTracker {
     const live = JSON.stringify(this.summary());
     const want = JSON.stringify(fresh.summary());
     if (live !== want)
-      throw new AtlasError('INTERNAL', `schema counters diverge from store contents: ${live} != ${want}`);
+      throw new AtlasError(
+        'INTERNAL',
+        `schema counters diverge from store contents: ${live} != ${want}`,
+      );
   }
 
   private labelStats(label: string): LabelStats {
