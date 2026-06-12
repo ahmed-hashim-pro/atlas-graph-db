@@ -1,7 +1,12 @@
 import type { GraphStore } from '../store.js';
 import type { LeaseProvider } from '../traversal/traversal.js';
 import type { NodeId } from '../types.js';
-import { withAlgoLease, type AlgoOptions, type Direction } from './runner.js';
+import { withAlgoLease, type AlgoOptions, type Direction, type PathResult } from './runner.js';
+import {
+  allShortestPaths,
+  shortestPath,
+  type ShortestPathOptions,
+} from './shortest-path.js';
 import { bfs, dfs, degree, type TraverseOptions } from './traverse.js';
 
 /**
@@ -26,5 +31,17 @@ export class AlgoFacade {
 
   degree(opts: { direction?: Direction } & AlgoOptions = {}): Promise<{ node: NodeId; score: number }[]> {
     return withAlgoLease(this.leases, opts, (t) => degree(this.store, t, opts));
+  }
+
+  shortestPath(
+    opts: ShortestPathOptions & AlgoOptions,
+  ): Promise<{ path: PathResult; cost: number } | null> {
+    return withAlgoLease(this.leases, opts, (t) => shortestPath(this.store, t, opts));
+  }
+
+  allShortestPaths(
+    opts: { from: NodeId; to: NodeId; type?: string } & AlgoOptions,
+  ): Promise<{ path: PathResult; cost: number }[]> {
+    return withAlgoLease(this.leases, opts, (t) => allShortestPaths(this.store, t, opts));
   }
 }
