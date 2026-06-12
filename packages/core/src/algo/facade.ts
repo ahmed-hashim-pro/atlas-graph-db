@@ -1,6 +1,7 @@
 import type { GraphStore } from '../store.js';
 import type { LeaseProvider } from '../traversal/traversal.js';
 import type { NodeId } from '../types.js';
+import { betweenness, type BetweennessOptions } from './betweenness.js';
 import { components, type ComponentsOptions } from './components.js';
 import { topoSort, cycles } from './dag.js';
 import { louvain, type LouvainOptions } from './louvain.js';
@@ -71,5 +72,11 @@ export class AlgoFacade {
 
   louvain(opts: LouvainOptions & AlgoOptions = {}): Promise<{ node: NodeId; community: number }[]> {
     return withAlgoLease(this.leases, opts, (t) => louvain(this.store, t, opts));
+  }
+
+  betweenness(
+    opts: BetweennessOptions & AlgoOptions = {},
+  ): Promise<{ node: NodeId; score: number }[]> {
+    return withAlgoLease(this.leases, opts, (t) => betweenness(this.store, t, opts));
   }
 }
