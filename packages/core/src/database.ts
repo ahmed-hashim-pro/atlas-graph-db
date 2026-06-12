@@ -215,6 +215,10 @@ export class AtlasDatabase {
    * applies) until release() or the budget elapses — whichever comes first.
    * Yielding readers (stream(), future algorithms) use this for a
    * point-in-time view; synchronous reads never need it.
+   *
+   * A lease that is never release()d — e.g. an abandoned stream() iterator —
+   * holds writes (and delays close()) until its budget expires. Always
+   * release in a finally, or consume streams with for-await.
    */
   acquireReadLease(opts: { budgetMs?: number } = {}): Promise<ReadLease> {
     const budgetMs = opts.budgetMs ?? 30_000;
