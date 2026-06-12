@@ -6,3 +6,4 @@ dist/
 data/
 .idea/
 *.tsbuildinfo
+.DS_Store
