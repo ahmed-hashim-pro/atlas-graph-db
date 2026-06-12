@@ -3,24 +3,32 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase, type AtlasDatabase } from '../src/database.js';
-import { AtlasError } from '../src/errors.js';
 
 let dir: string;
 let db: AtlasDatabase;
-let ids: Record<string, number>;
+let ids: { ada: number; charles: number; notes: number };
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'atlas-trav2-'));
   db = await openDatabase(dir);
-  ids = {};
   await db.transact((tx) => {
     tx.createIndex({ kind: 'property', label: 'Person', property: 'born' });
+    tx.createIndex({ kind: 'property', label: 'Person', property: 'died' });
     tx.createIndex({ kind: 'fulltext', label: 'Document', property: 'title' });
-    ids.ada = tx.createNode(['Person'], { name: 'Ada', born: 1815 });
-    ids.charles = tx.createNode(['Person'], { name: 'Charles', born: 1791 });
-    ids.notes = tx.createNode(['Document'], { title: 'Notes on the Analytical Engine' });
-    tx.createEdge('WROTE', ids.ada, ids.notes, { year: 1843 });
-    tx.createEdge('KNOWS', ids.ada, ids.charles, { since: 1833 });
+    const ada = tx.createNode(['Person'], {
+      name: 'Ada',
+      born: 1815,
+      died: new Date('1852-11-27'),
+    });
+    const charles = tx.createNode(['Person'], {
+      name: 'Charles',
+      born: 1791,
+      died: new Date('1871-10-18'),
+    });
+    const notes = tx.createNode(['Document'], { title: 'Notes on the Analytical Engine' });
+    tx.createEdge('WROTE', ada, notes, { year: 1843 });
+    tx.createEdge('KNOWS', ada, charles, { since: 1833 });
+    ids = { ada, charles, notes };
   });
 });
 afterEach(async () => {
@@ -31,23 +39,57 @@ afterEach(async () => {
 describe('index-backed sources', () => {
   it('nodesWhere serves exact and range queries from the index', () => {
     const g = db.graph();
-    expect(g.nodesWhere('Person', 'born', 1815).toArray().map((n) => n.id)).toEqual([ids.ada]);
-    expect(g.nodesWhere('Person', 'born', { lt: 1800 }).toArray().map((n) => n.id)).toEqual([
-      ids.charles,
-    ]);
+    expect(
+      g
+        .nodesWhere('Person', 'born', 1815)
+        .toArray()
+        .map((n) => n.id),
+    ).toEqual([ids.ada]);
+    expect(
+      g
+        .nodesWhere('Person', 'born', { lt: 1800 })
+        .toArray()
+        .map((n) => n.id),
+    ).toEqual([ids.charles]);
+  });
+
+  it('nodesWhere with a Date takes the exact path, not the range path', () => {
+    // Both people are in the 'died' index. If the Date branch of the
+    // discriminator regressed into lookupRange, the bound-less range would
+    // return BOTH ids; the exact path returns only Ada's.
+    const g = db.graph();
+    expect(
+      g
+        .nodesWhere('Person', 'died', new Date('1852-11-27'))
+        .toArray()
+        .map((n) => n.id),
+    ).toEqual([ids.ada]);
+    expect(g.nodesWhere('Person', 'died', new Date('1900-01-01')).toArray()).toEqual([]);
   });
 
   it('nodesWhere without an index throws NOT_FOUND (no silent scans)', () => {
-    expect(() => db.graph().nodesWhere('Person', 'name', 'Ada').toArray()).toThrowError(AtlasError);
+    const g = db.graph();
+    expect(() => g.nodesWhere('Person', 'name', 'Ada').toArray()).toThrowError(
+      /no property index on Person\.name/,
+    );
+    // range branch: registry-thrown NOT_FOUND, same message
+    expect(() => g.nodesWhere('Person', 'name', { lt: 'Z' }).toArray()).toThrowError(
+      /no property index on Person\.name/,
+    );
   });
 
   it('search() rides the fulltext index, prefix mode included', () => {
     const g = db.graph();
-    expect(g.search('Document', 'title', 'analytical engine').toArray().map((n) => n.id)).toEqual([
-      ids.notes,
-    ]);
+    expect(
+      g
+        .search('Document', 'title', 'analytical engine')
+        .toArray()
+        .map((n) => n.id),
+    ).toEqual([ids.notes]);
     expect(g.search('Document', 'title', 'anal', { prefix: true }).count()).toBe(1);
-    expect(() => g.search('Document', 'nope', 'x').toArray()).toThrowError(AtlasError);
+    expect(() => g.search('Document', 'nope', 'x').toArray()).toThrowError(
+      /no fulltext index on Document\.nope/,
+    );
   });
 });
 
@@ -76,6 +118,11 @@ describe('edge steps and paths', () => {
     expect(people.min((n) => n.props.born as number)).toBe(1791);
     expect(people.max((n) => n.props.born as number)).toBe(1815);
     expect(people.avg((n) => n.props.born as number)).toBe(1803);
-    expect(db.graph().nodes('Nope').avg((n) => 1)).toBeUndefined();
+    expect(
+      db
+        .graph()
+        .nodes('Nope')
+        .avg(() => 1),
+    ).toBeUndefined();
   });
 });

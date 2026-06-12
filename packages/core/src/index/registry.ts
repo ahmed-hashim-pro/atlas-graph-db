@@ -144,7 +144,11 @@ export class IndexRegistry {
     return ix.getExact(value) ?? new Set();
   }
 
-  /** Throws NOT_FOUND when no scalar index exists — range scans never fall back to table scans silently. */
+  /**
+   * Throws NOT_FOUND when no scalar index exists — range scans never fall back
+   * to table scans silently. Message must stay in sync with the exact-path
+   * throw in GraphView.nodesWhere (traversal.ts).
+   */
   lookupRange(label: string, property: string, q: RangeQuery): IterableIterator<NodeId> {
     const ix = this.scalarIndex(label, property);
     if (!ix) throw new AtlasError('NOT_FOUND', `no property index on ${label}.${property}`);

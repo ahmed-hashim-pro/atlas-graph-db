@@ -87,7 +87,8 @@ abstract class BaseTraversal<T extends { id: number; props: Props }> {
 
   count(): number {
     let n = 0;
-    for (const _ of this.source()) n++;
+    const it = this.source();
+    while (!it.next().done) n++;
     return n;
   }
 
@@ -258,6 +259,8 @@ export class GraphView {
     }
     return NodeTraversal.fromIds(store, () => {
       const ids = store.indexes.lookupExact(label, property, q);
+      // Message must stay in sync with IndexRegistry.lookupRange, which throws
+      // the same NOT_FOUND for the range branch above.
       if (ids === undefined)
         throw new AtlasError('NOT_FOUND', `no property index on ${label}.${property}`);
       return ids;
