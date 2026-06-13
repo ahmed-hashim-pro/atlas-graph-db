@@ -107,4 +107,10 @@ describe('runRead — basics', () => {
       expect(['TIMEOUT', 'ROW_LIMIT']).toContain((e as AqlError).code);
     }
   });
+
+  it('LIMIT short-circuits before maxRows: small LIMIT under tiny maxRows does not raise ROW_LIMIT', () => {
+    // 5 nodes total, maxRows 2, but LIMIT 1 only ever produces one surviving row.
+    const r = run('MATCH (n) RETURN n LIMIT 1', {}, { maxRows: 2 });
+    expect(r.rows).toHaveLength(1);
+  });
 });

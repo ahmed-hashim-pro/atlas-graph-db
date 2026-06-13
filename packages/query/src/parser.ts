@@ -17,13 +17,42 @@ import { AqlError } from './errors.js';
 import { lex } from './lexer.js';
 import type { Token } from './lexer.js';
 
+/** Cap on expression nesting depth; protects the recursive parser/walkers from stack overflow. */
+const MAX_EXPR_DEPTH = 256;
+
 export class TokenStream {
   private i = 0;
+  private depth = 0;
 
   constructor(
     private readonly tokens: Token[],
     readonly source: string,
   ) {}
+
+  /**
+   * Deepen the expression tree by one level, throwing PARSE_ERROR past the cap.
+   * Returns the depth at entry so callers can restore() it on exit. This bounds the
+   * produced tree depth (not just call recursion), so flat-but-long AND/OR chains —
+   * which would otherwise overflow walkExpr/evalExpr/renderExpr — are also capped.
+   */
+  enter(): number {
+    const saved = this.depth;
+    if (++this.depth > MAX_EXPR_DEPTH) {
+      const t = this.peek();
+      throw new AqlError(
+        'PARSE_ERROR',
+        `expression nesting too deep (max ${MAX_EXPR_DEPTH})`,
+        t,
+        this.source,
+      );
+    }
+    return saved;
+  }
+
+  /** Restore expression-nesting depth to a value previously returned by enter(). */
+  restore(saved: number): void {
+    this.depth = saved;
+  }
 
   peek(offset = 0): Token {
     return this.tokens[Math.min(this.i + offset, this.tokens.length - 1)]!;
@@ -88,29 +117,48 @@ export function parseExpression(ts: TokenStream): Expr {
 }
 
 function parseOr(ts: TokenStream): Expr {
-  let left = parseAnd(ts);
-  while (ts.atKeyword('OR')) {
-    const p = pos(ts.next());
-    left = { kind: 'or', left, right: parseAnd(ts), pos: p };
+  const saved = ts.enter();
+  try {
+    let left = parseAnd(ts);
+    while (ts.atKeyword('OR')) {
+      // Each new node deepens the left spine of the produced tree by one level.
+      ts.enter();
+      const p = pos(ts.next());
+      left = { kind: 'or', left, right: parseAnd(ts), pos: p };
+    }
+    return left;
+  } finally {
+    ts.restore(saved);
   }
-  return left;
 }
 
 function parseAnd(ts: TokenStream): Expr {
-  let left = parseNot(ts);
-  while (ts.atKeyword('AND')) {
-    const p = pos(ts.next());
-    left = { kind: 'and', left, right: parseNot(ts), pos: p };
+  const saved = ts.enter();
+  try {
+    let left = parseNot(ts);
+    while (ts.atKeyword('AND')) {
+      // Each new node deepens the left spine of the produced tree by one level.
+      ts.enter();
+      const p = pos(ts.next());
+      left = { kind: 'and', left, right: parseNot(ts), pos: p };
+    }
+    return left;
+  } finally {
+    ts.restore(saved);
   }
-  return left;
 }
 
 function parseNot(ts: TokenStream): Expr {
-  if (ts.atKeyword('NOT')) {
-    const p = pos(ts.next());
-    return { kind: 'not', expr: parseNot(ts), pos: p };
+  const saved = ts.enter();
+  try {
+    if (ts.atKeyword('NOT')) {
+      const p = pos(ts.next());
+      return { kind: 'not', expr: parseNot(ts), pos: p };
+    }
+    return parseComparison(ts);
+  } finally {
+    ts.restore(saved);
   }
-  return parseComparison(ts);
 }
 
 const CMP_OPS = ['=', '<>', '<', '<=', '>', '>='] as const;
@@ -178,20 +226,30 @@ function parsePrimary(ts: TokenStream): Expr {
   }
   if (t.type === 'punct' && t.value === '[') {
     ts.next();
-    const items: Expr[] = [];
-    if (!ts.atPunct(']')) {
-      do {
-        items.push(parseExpression(ts));
-      } while (ts.takePunct(','));
+    const saved = ts.enter();
+    try {
+      const items: Expr[] = [];
+      if (!ts.atPunct(']')) {
+        do {
+          items.push(parseExpression(ts));
+        } while (ts.takePunct(','));
+      }
+      ts.expectPunct(']');
+      return { kind: 'list', items, pos: pos(t) };
+    } finally {
+      ts.restore(saved);
     }
-    ts.expectPunct(']');
-    return { kind: 'list', items, pos: pos(t) };
   }
   if (t.type === 'punct' && t.value === '(') {
     ts.next();
-    const inner = parseExpression(ts);
-    ts.expectPunct(')');
-    return inner;
+    const saved = ts.enter();
+    try {
+      const inner = parseExpression(ts);
+      ts.expectPunct(')');
+      return inner;
+    } finally {
+      ts.restore(saved);
+    }
   }
   if (t.type === 'keyword' && t.value === 'EXISTS') {
     ts.next();
@@ -293,8 +351,17 @@ function parseNodePattern(ts: TokenStream): NodePattern {
   if (ts.peek().type === 'ident' && !ts.atPunct(':')) node.variable = ts.next().value;
   while (ts.takePunct(':')) node.labels.push(ts.expectIdent('label').value);
   if (ts.takePunct('{')) {
+    const seen = new Set<string>();
     do {
       const prop = ts.expectIdent('property name');
+      if (seen.has(prop.value))
+        throw new AqlError(
+          'SEMANTIC_ERROR',
+          `duplicate property "${prop.value}" in pattern`,
+          prop,
+          ts.source,
+        );
+      seen.add(prop.value);
       ts.expectPunct(':');
       node.props.push({ property: prop.value, value: parseExpression(ts) });
     } while (ts.takePunct(','));

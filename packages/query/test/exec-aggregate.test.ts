@@ -78,4 +78,37 @@ describe('aggregation', () => {
   it('grouped query over empty match returns no rows', () => {
     expect(run("MATCH (p:Person {name: 'Nobody'}) RETURN p.name, count(*)").rows).toEqual([]);
   });
+
+  it('stableKey is injective: delimiter-embedding props do not collide in DISTINCT/GROUP BY', () => {
+    // node1 {p1:'a|string:b', p2:'c'} vs node2 {p1:'a', p2:'b|string:c'} would collide under a
+    // naive '|'-joined key: 'a|string:b'+'|'+'c' === 'a'+'|'+'b|string:c'.
+    let dir2: string;
+    return (async () => {
+      dir2 = await mkdtemp(join(tmpdir(), 'atlas-execk-'));
+      const db2 = await openDatabase(dir2);
+      try {
+        await db2.transact((tx) => {
+          tx.createNode(['Row'], { p1: 'a|string:b', p2: 'c' });
+          tx.createNode(['Row'], { p1: 'a', p2: 'b|string:c' });
+        });
+        const run2 = (src: string) => {
+          const { query } = parseQuery(src);
+          return runRead(planQuery(query, db2.graphStore), query, db2.graphStore, {
+            params: {},
+            source: src,
+            timeoutMs: 10_000,
+            maxRows: 100_000,
+          });
+        };
+        const distinct = run2('MATCH (n:Row) RETURN DISTINCT n.p1, n.p2');
+        expect(distinct.rows).toHaveLength(2);
+        const grouped = run2('MATCH (n:Row) RETURN n.p1, n.p2, count(*)');
+        expect(grouped.rows).toHaveLength(2);
+        expect(grouped.rows.map((r) => r[2])).toEqual([1, 1]);
+      } finally {
+        await db2.close();
+        await rm(dir2, { recursive: true, force: true });
+      }
+    })();
+  });
 });

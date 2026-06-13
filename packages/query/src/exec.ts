@@ -250,10 +250,30 @@ export function runRead(
   }
   let rows: Row[] = [];
 
+  // Resolve skip/limit up front (they may be params) so the non-aggregating fast path
+  // can short-circuit pulling bindings once the final LIMIT window is filled.
+  const skip = countOf(query.skip, ctx, opts, 'SKIP');
+  const limit = countOf(query.limit, ctx, opts, 'LIMIT');
+
   if (!aggregating) {
+    // When there is no ORDER BY and no DISTINCT, rows stream straight to the output
+    // window: stop after (skip + limit) collected, and count produced rows against
+    // maxRows only for those that survive into the window (i.e. after SKIP).
+    const canShortCircuit = query.orderBy.length === 0 && !query.distinct;
+    const window = canShortCircuit && limit !== undefined ? (skip ?? 0) + limit : undefined;
+    const skipN = skip ?? 0;
+    let collected = 0;
     for (const b of bindings(bindingRoot)) {
-      guard.result();
-      rows.push({ values: query.items.map((it) => evalExpr(it.expr, b, ctx)), binding: b });
+      if (window !== undefined && collected >= window) break;
+      const row = { values: query.items.map((it) => evalExpr(it.expr, b, ctx)), binding: b };
+      if (canShortCircuit) {
+        // Only the rows surviving SKIP count against maxRows.
+        if (collected >= skipN) guard.result();
+      } else {
+        guard.result();
+      }
+      rows.push(row);
+      collected++;
     }
   } else {
     interface Acc {
@@ -378,8 +398,6 @@ export function runRead(
     });
   }
 
-  const skip = countOf(query.skip, ctx, opts, 'SKIP');
-  const limit = countOf(query.limit, ctx, opts, 'LIMIT');
   if (skip !== undefined || limit !== undefined)
     rows = rows.slice(skip ?? 0, limit === undefined ? undefined : (skip ?? 0) + limit);
 
@@ -404,15 +422,19 @@ function countOf(
   return v;
 }
 
-/** Stable dedup/grouping key: records by kind+id, dates by epoch, arrays recursive. */
+/** Encode one runtime value: records by kind+id, dates by epoch, arrays recursive. */
+function encodeOne(v: RuntimeValue): string {
+  if (v === null) return '∅';
+  if (v instanceof Date) return `D${v.getTime()}`;
+  if (Array.isArray(v)) return `[${stableKey(v)}]`;
+  if (typeof v === 'object') return ('type' in v ? 'E' : 'N') + v.id;
+  return `${typeof v}:${String(v)}`;
+}
+
+/**
+ * Stable, injective dedup/grouping key. Each component is JSON.stringify'd before
+ * joining so the '|' delimiter cannot be forged inside a value (e.g. 'a|string:b').
+ */
 function stableKey(values: RuntimeValue[]): string {
-  return values
-    .map((v): string => {
-      if (v === null) return '∅';
-      if (v instanceof Date) return `D${v.getTime()}`;
-      if (Array.isArray(v)) return `[${stableKey(v)}]`;
-      if (typeof v === 'object') return ('type' in v ? 'E' : 'N') + v.id;
-      return `${typeof v}:${String(v)}`;
-    })
-    .join('|');
+  return values.map((v) => JSON.stringify(encodeOne(v))).join('|');
 }
