@@ -8,6 +8,7 @@ import { toProblem } from './errors.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerDatabaseRoutes } from './routes/databases.js';
 import { registerDataRoutes } from './routes/data.js';
+import { registerIoRoutes } from './routes/io.js';
 import { registerQueryRoutes } from './routes/query.js';
 import { registerTokenRoutes } from './routes/tokens.js';
 
@@ -45,6 +46,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   await registerAuthRoutes(app, ctx);
   await registerDatabaseRoutes(app, ctx);
   await registerDataRoutes(app, ctx);
+  await registerIoRoutes(app, ctx);
   await registerQueryRoutes(app, ctx);
   await registerTokenRoutes(app, ctx);
 

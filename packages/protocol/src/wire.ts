@@ -111,3 +111,27 @@ export type EdgeCreateReq = z.infer<typeof EdgeCreateReq>;
 
 export const EdgePatchReq = NodePatchReq;
 export type EdgePatchReq = z.infer<typeof EdgePatchReq>;
+
+export const ImportNodeSpec = z.object({
+  tempId: z.string().min(1),
+  labels: z.array(z.string().min(1)).min(1),
+  properties: propsSchema.default({}),
+});
+export const ImportEdgeSpec = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+  type: z.string().min(1),
+  properties: propsSchema.default({}),
+});
+export const ImportReq = z.object({
+  nodes: z.array(ImportNodeSpec).default([]),
+  edges: z.array(ImportEdgeSpec).default([]),
+  atomic: z.boolean().default(false),
+});
+export type ImportReq = z.infer<typeof ImportReq>;
+
+export interface ImportResult {
+  committed: { nodes: number; edges: number };
+  idMap: Record<string, number>; // tempId → assigned engine id
+  error?: { message: string; at: { kind: 'node' | 'edge'; index: number } };
+}
