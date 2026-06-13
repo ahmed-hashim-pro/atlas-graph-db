@@ -87,6 +87,27 @@ export function toProblem(err: unknown): { status: number; body: ProblemDetails 
       },
     };
   }
+  // Fastify-native client errors (malformed JSON, body too large, unsupported
+  // media type) carry a numeric 4xx statusCode + a FST_ERR_* code. Honor them
+  // so client faults are not mis-reported as 500s.
+  const native = err as { statusCode?: unknown; code?: unknown; message?: unknown };
+  if (
+    typeof native.statusCode === 'number' &&
+    native.statusCode >= 400 &&
+    native.statusCode < 500
+  ) {
+    const status = native.statusCode;
+    return {
+      status,
+      body: {
+        type: 'about:blank',
+        title: httpTitle(status),
+        status,
+        detail: typeof native.message === 'string' ? native.message : undefined,
+        code: typeof native.code === 'string' ? native.code : 'BAD_REQUEST',
+      },
+    };
+  }
   return {
     status: 500,
     body: { type: 'about:blank', title: 'Internal Server Error', status: 500, code: 'INTERNAL' },

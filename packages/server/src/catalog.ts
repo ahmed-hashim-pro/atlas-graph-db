@@ -150,6 +150,7 @@ export class CatalogService {
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** M5b seam: backs the server-admin "list all databases" view (no consumer in M5a). */
   async listAllDatabases(): Promise<{ name: string; description: string }[]> {
     return [...this.db.nodesByLabel('Database')]
       .map((d) => ({ name: String(d.props.name), description: String(d.props.description ?? '') }))
