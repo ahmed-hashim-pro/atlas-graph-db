@@ -20,6 +20,10 @@ export async function authenticate(
   req: FastifyRequest,
   catalog: CatalogService,
 ): Promise<Principal | null> {
+  // Reuse a principal already resolved earlier in the request lifecycle (e.g. by the
+  // rate-limit onRequest hook) so each request authenticates at most once — avoiding a
+  // redundant findUser/findToken lookup and, for bearer tokens, a second argon2 verify.
+  if (req.principal) return req.principal;
   const sid = req.cookies?.atlas_session;
   if (sid) {
     const unsigned = req.unsignCookie(sid);
