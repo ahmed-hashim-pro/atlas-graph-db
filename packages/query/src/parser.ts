@@ -508,7 +508,54 @@ function tryParseDdl(ts: TokenStream): DdlStatement | null {
 }
 
 function parseCall(ts: TokenStream): CallStatement {
-  ts.fail('CALL is not yet implemented'); // implemented in Task 6
+  const start = ts.expectKeyword('CALL');
+  const head = ts.expectIdent('procedure namespace');
+  let name = head.value;
+  while (ts.takePunct('.')) name += '.' + ts.expectIdent('procedure name').value;
+  ts.expectPunct('(');
+  const args: Expr[] = [];
+  if (!ts.atPunct(')')) {
+    do {
+      args.push(parseCallArg(ts));
+    } while (ts.takePunct(','));
+  }
+  ts.expectPunct(')');
+  const yields: { name: string; alias?: string }[] = [];
+  if (ts.takeKeyword('YIELD')) {
+    do {
+      const col = ts.expectIdent('yield column');
+      const alias = ts.takeKeyword('AS') ? ts.expectIdent('alias').value : undefined;
+      yields.push({ name: col.value, alias });
+    } while (ts.takePunct(','));
+  }
+  return { name, args, yields, pos: pos(start) };
+}
+
+/** CALL args are either bare expressions or a single {key: expr, ...} options map. */
+function parseCallArg(ts: TokenStream): Expr {
+  if (ts.atPunct('{')) {
+    const open = ts.next();
+    const entries: { property: string; value: Expr }[] = [];
+    if (!ts.atPunct('}')) {
+      do {
+        const key = ts.expectIdent('option name');
+        ts.expectPunct(':');
+        entries.push({ property: key.value, value: parseExpression(ts) });
+      } while (ts.takePunct(','));
+    }
+    ts.expectPunct('}');
+    // Represent the options map as a list of [key,value] handled by call.ts.
+    return {
+      kind: 'list',
+      items: entries.map((e) => ({
+        kind: 'list',
+        items: [{ kind: 'literal', value: e.property, pos: pos(open) }, e.value],
+        pos: pos(open),
+      })),
+      pos: pos(open),
+    };
+  }
+  return parseExpression(ts);
 }
 
 /** SKIP/LIMIT accept only a non-negative integer literal or a parameter. */
