@@ -2,3 +2,5 @@ pnpm-lock.yaml
 dist
 docs/
 .superpowers/
+apps/web/.angular
+apps/web/out-tsc

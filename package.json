@@ -7,9 +7,10 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && pnpm -F web build",
     "typecheck:test": "tsc -p packages/core/test/tsconfig.json && tsc -p packages/core/bench/tsconfig.json && tsc -p packages/datasets/test/tsconfig.json && tsc -p packages/query/test/tsconfig.json && tsc -p packages/protocol/test/tsconfig.json && tsc -p packages/server/test/tsconfig.json && tsc -p packages/client/test/tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run && pnpm -F web exec ng test --watch=false",
+    "test:web": "pnpm -F web exec ng test --watch=false",
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:fix": "prettier --write ."
