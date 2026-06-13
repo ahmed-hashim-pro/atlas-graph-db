@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import type { ReadQuery } from '../src/ast.js';
 import { AqlError } from '../src/errors.js';
 import { parseQuery } from '../src/parser.js';
 
+/** Parse a read query through the statement dispatcher and unwrap the ReadQuery. */
+function read(src: string): { explain: boolean; query: ReadQuery } {
+  const p = parseQuery(src);
+  if (p.statement.type !== 'read') throw new Error(`expected read, got ${p.statement.type}`);
+  return { explain: p.explain, query: p.statement.query };
+}
+
 describe('parseQuery — patterns', () => {
   it('parses the spec example end to end', () => {
-    const { explain, query } = parseQuery(
+    const { explain, query } = read(
       "MATCH (p:Person)-[:WROTE]->(d:Document)\nWHERE d.year > 1840 AND p.name CONTAINS 'lovelace'\nRETURN p.name, count(d) AS works\nORDER BY works DESC LIMIT 10",
     );
     expect(explain).toBe(false);
@@ -20,7 +28,7 @@ describe('parseQuery — patterns', () => {
   });
 
   it('parses directions, multi-types, inline props, and anonymous elements', () => {
-    const { query } = parseQuery(
+    const { query } = read(
       'MATCH (a {name: $n})<-[:CITES|MENTIONS]-(b), (b)-[e]-(c:Doc:Old) RETURN a',
     );
     const [p1, p2] = query.patterns;
@@ -31,7 +39,7 @@ describe('parseQuery — patterns', () => {
   });
 
   it('parses variable-length forms with defaults and caps', () => {
-    const q = (src: string) => parseQuery(src).query.patterns[0]!.edges[0]!.varLength;
+    const q = (src: string) => read(src).query.patterns[0]!.edges[0]!.varLength;
     expect(q('MATCH (a)-[:R*]->(b) RETURN a')).toEqual({ min: 1, max: 8 });
     expect(q('MATCH (a)-[:R*3]->(b) RETURN a')).toEqual({ min: 3, max: 3 });
     expect(q('MATCH (a)-[:R*1..3]->(b) RETURN a')).toEqual({ min: 1, max: 3 });
@@ -39,7 +47,7 @@ describe('parseQuery — patterns', () => {
   });
 
   it('parses EXPLAIN prefix and DISTINCT/SKIP', () => {
-    const { explain, query } = parseQuery('EXPLAIN MATCH (n) RETURN DISTINCT n SKIP $s LIMIT 5');
+    const { explain, query } = read('EXPLAIN MATCH (n) RETURN DISTINCT n SKIP $s LIMIT 5');
     expect(explain).toBe(true);
     expect(query.distinct).toBe(true);
     expect(query.skip).toMatchObject({ kind: 'param', name: 's' });
@@ -76,8 +84,8 @@ describe('parseQuery — semantic validation', () => {
     expect(err('MATCH (a)-[e:R*1..2]->(b) RETURN a').code).toBe('SEMANTIC_ERROR');
   });
 
-  it('rejects writes (M4b scope) as parse errors', () => {
-    expect(err('CREATE (n:X) RETURN n').code).toBe('PARSE_ERROR');
+  it('classifies a standalone CREATE as a write statement (M4b)', () => {
+    expect(parseQuery('CREATE (n:X) RETURN n').statement.type).toBe('write');
   });
 
   it('rejects duplicate inline property keys in a node pattern', () => {

@@ -3,9 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openDatabase, type AtlasDatabase } from '@atlas/core';
+import type { ReadQuery } from '../src/ast.js';
 import { parseQuery } from '../src/parser.js';
 import { planQuery } from '../src/planner.js';
 import { serializePlan, type PlanNode } from '../src/plan.js';
+
+/** Parse a read query through the statement dispatcher and unwrap the ReadQuery. */
+function readQuery(src: string): ReadQuery {
+  const p = parseQuery(src);
+  if (p.statement.type !== 'read') throw new Error(`expected read, got ${p.statement.type}`);
+  return p.statement.query;
+}
 
 let dir: string;
 let db: AtlasDatabase;
@@ -25,7 +33,7 @@ afterAll(async () => {
 });
 
 function plan(src: string): PlanNode {
-  return planQuery(parseQuery(src).query, db.graphStore);
+  return planQuery(readQuery(src), db.graphStore);
 }
 
 function leftmost(p: PlanNode): PlanNode {

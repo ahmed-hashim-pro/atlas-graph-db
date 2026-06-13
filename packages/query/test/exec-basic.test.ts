@@ -3,10 +3,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openDatabase, type AtlasDatabase, type NodeRecord } from '@atlas/core';
+import type { ReadQuery } from '../src/ast.js';
 import { AqlError } from '../src/errors.js';
 import { runRead } from '../src/exec.js';
 import { parseQuery } from '../src/parser.js';
 import { planQuery } from '../src/planner.js';
+
+/** Parse a read query through the statement dispatcher and unwrap the ReadQuery. */
+function readQuery(src: string): ReadQuery {
+  const p = parseQuery(src);
+  if (p.statement.type !== 'read') throw new Error(`expected read, got ${p.statement.type}`);
+  return p.statement.query;
+}
 
 let dir: string;
 let db: AtlasDatabase;
@@ -38,7 +46,7 @@ function run(
   params: Record<string, unknown> = {},
   opts: { maxRows?: number; timeoutMs?: number } = {},
 ) {
-  const { query } = parseQuery(src);
+  const query = readQuery(src);
   const plan = planQuery(query, db.graphStore);
   return runRead(plan, query, db.graphStore, {
     params,
