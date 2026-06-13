@@ -12,7 +12,8 @@ export function loadConfig(env: Record<string, string | undefined>): ServerConfi
   const dataDir = env.ATLAS_DATA_DIR;
   if (!dataDir) throw new Error('ATLAS_DATA_DIR is required');
   const secret = env.ATLAS_SECRET;
-  if (!secret || secret.length < 32) throw new Error('ATLAS_SECRET is required and must be >= 32 chars');
+  if (!secret || secret.length < 32)
+    throw new Error('ATLAS_SECRET is required and must be >= 32 chars');
   const adminUser = env.ATLAS_ADMIN_USER;
   const adminPassword = env.ATLAS_ADMIN_PASSWORD;
   const admin =

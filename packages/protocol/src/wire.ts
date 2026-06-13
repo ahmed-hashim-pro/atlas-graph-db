@@ -5,7 +5,10 @@ export const dbNameSchema = z
   .string()
   .min(1)
   .max(64)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'must be alphanumeric with - or _, not starting with - or _');
+  .regex(
+    /^[A-Za-z0-9][A-Za-z0-9_-]*$/,
+    'must be alphanumeric with - or _, not starting with - or _',
+  );
 
 export const usernameSchema = z
   .string()
@@ -74,5 +77,11 @@ export interface DbInfo {
 export interface QueryResponse {
   columns: string[];
   rows: unknown[][];
-  stats: { rowsExamined: number; elapsedMs: number; created?: number; deleted?: number; propsSet?: number };
+  stats: {
+    rowsExamined: number;
+    elapsedMs: number;
+    created?: number;
+    deleted?: number;
+    propsSet?: number;
+  };
 }

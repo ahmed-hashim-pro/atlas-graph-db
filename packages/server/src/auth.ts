@@ -1,4 +1,4 @@
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyRequest } from 'fastify';
 import type { RoleName } from '@atlas/protocol';
 import type { CatalogService } from './catalog.js';
 import { verifyToken } from './crypto.js';
@@ -47,7 +47,7 @@ export async function authenticate(
 
 /** preHandler: requires an authenticated principal, else 401. */
 export function requireAuth(catalog: CatalogService) {
-  return async (req: FastifyRequest, _reply: FastifyReply): Promise<void> => {
+  return async (req: FastifyRequest): Promise<void> => {
     const principal = await authenticate(req, catalog);
     if (!principal) throw new HttpError(401, 'UNAUTHENTICATED', 'authentication required');
     req.principal = principal;
