@@ -120,5 +120,6 @@ function httpTitle(status: number): string {
   if (status === 403) return 'Forbidden';
   if (status === 404) return 'Not Found';
   if (status === 409) return 'Conflict';
+  if (status === 429) return 'Too Many Requests';
   return 'Error';
 }
