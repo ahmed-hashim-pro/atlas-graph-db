@@ -11,11 +11,18 @@ import { registerDataRoutes } from './routes/data.js';
 import { registerIoRoutes } from './routes/io.js';
 import { registerQueryRoutes } from './routes/query.js';
 import { registerTokenRoutes } from './routes/tokens.js';
+import { registerWsRoutes } from './routes/ws.js';
+
+/** Minimal metrics surface used by the WS route; Task 5 replaces this with the real MetricsRegistry. */
+export interface Metrics {
+  wsSubscribers: { inc(): void; dec(): void };
+}
 
 export interface AppContext {
   catalog: CatalogService;
   manager: DatabaseManager;
   config: ServerConfig;
+  metrics: Metrics;
 }
 
 export async function buildServer(config: ServerConfig): Promise<FastifyInstance> {
@@ -23,9 +30,12 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   const { join } = await import('node:path');
   const catalog = await CatalogService.open(join(config.dataDir, '_catalog'));
   const manager = new DatabaseManager(config.dataDir);
-  const ctx: AppContext = { catalog, manager, config };
+  const metrics: Metrics = { wsSubscribers: { inc() {}, dec() {} } };
+  const ctx: AppContext = { catalog, manager, config, metrics };
 
   await app.register(fastifyCookie, { secret: config.secret });
+  const fastifyWebsocket = (await import('@fastify/websocket')).default;
+  await app.register(fastifyWebsocket);
 
   // Uniform problem-details for thrown errors and 404s.
   app.setErrorHandler((err, _req, reply) => {
@@ -49,6 +59,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   await registerIoRoutes(app, ctx);
   await registerQueryRoutes(app, ctx);
   await registerTokenRoutes(app, ctx);
+  await registerWsRoutes(app, ctx);
 
   // Bootstrap admin once, if configured and no users exist yet.
   if (config.admin && !(await catalog.anyUserExists()))
