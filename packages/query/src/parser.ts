@@ -4,6 +4,8 @@ import {
   MAX_VAR_HOPS_DEFAULT,
   SCALAR_FUNCS,
   walkExpr,
+  type CallStatement,
+  type DdlStatement,
   type EdgePattern,
   type Expr,
   type NodePattern,
@@ -11,7 +13,12 @@ import {
   type PathPattern,
   type Pos,
   type ReadQuery,
+  type RemoveItem,
   type ReturnItem,
+  type SetItem,
+  type Statement,
+  type WriteClause,
+  type WriteQuery,
 } from './ast.js';
 import { AqlError } from './errors.js';
 import { lex } from './lexer.js';
@@ -289,27 +296,80 @@ export { AGGREGATES, SCALAR_FUNCS };
 export function parseQuery(source: string): ParsedQuery {
   const ts = new TokenStream(lex(source), source);
   const explain = ts.takeKeyword('EXPLAIN');
-  const query = parseReadQuery(ts);
-  const trailing = ts.peek();
-  if (trailing.type !== 'eof') ts.fail('expected end of query');
-  validateQuery(query, source);
-  return { explain, query };
+  const statement = parseStatement(ts);
+  if (ts.peek().type !== 'eof') ts.fail('expected end of query');
+  validateStatement(statement, source);
+  return { explain, statement };
 }
 
-function parseReadQuery(ts: TokenStream): ReadQuery {
+function parseStatement(ts: TokenStream): Statement {
+  if (ts.atKeyword('CALL')) return { type: 'call', statement: parseCall(ts) };
+  if (ts.atKeyword('SHOW') || ts.atKeyword('CREATE') || ts.atKeyword('DROP')) {
+    const ddl = tryParseDdl();
+    if (ddl) return { type: 'ddl', statement: ddl };
+    // CREATE that is not DDL falls through to the write parser below.
+  }
+  // A statement is a write iff it contains any write clause; otherwise a read.
+  // MATCH may precede either, so scan structurally.
+  const startsWrite = ts.atKeyword('CREATE') || ts.atKeyword('MERGE');
+  if (startsWrite) return { type: 'write', query: parseWriteQuery(ts, undefined) };
+  if (ts.atKeyword('MATCH')) {
+    const readPrefix = parseMatchPrefix(ts);
+    if (isWriteClauseStart(ts)) return { type: 'write', query: parseWriteQuery(ts, readPrefix) };
+    return { type: 'read', query: finishReadQuery(ts, readPrefix) };
+  }
+  ts.fail('expected MATCH, CREATE, MERGE, CALL, SHOW, or DROP');
+}
+
+interface MatchPrefix {
+  patterns: PathPattern[];
+  where?: Expr;
+}
+
+function parseMatchPrefix(ts: TokenStream): MatchPrefix {
   ts.expectKeyword('MATCH');
   const patterns: PathPattern[] = [parsePathPattern(ts)];
   while (ts.takePunct(',')) patterns.push(parsePathPattern(ts));
   const where = ts.takeKeyword('WHERE') ? parseExpression(ts) : undefined;
+  return { patterns, where };
+}
+
+function isWriteClauseStart(ts: TokenStream): boolean {
+  return (
+    ts.atKeyword('CREATE') ||
+    ts.atKeyword('MERGE') ||
+    ts.atKeyword('SET') ||
+    ts.atKeyword('REMOVE') ||
+    ts.atKeyword('DELETE') ||
+    ts.atKeyword('DETACH')
+  );
+}
+
+// Extracted from the old parseReadQuery: everything from RETURN onward.
+function finishReadQuery(ts: TokenStream, prefix: MatchPrefix): ReadQuery {
   ts.expectKeyword('RETURN');
   const distinct = ts.takeKeyword('DISTINCT');
+  const items = parseReturnItems(ts);
+  const { orderBy, skip, limit } = parseReadTail(ts);
+  return { patterns: prefix.patterns, where: prefix.where, distinct, items, orderBy, skip, limit };
+}
+
+function parseReturnItems(ts: TokenStream): ReturnItem[] {
   const items: ReturnItem[] = [];
   do {
     const start = ts.peek();
     const expr = parseExpression(ts);
     const alias = ts.takeKeyword('AS') ? ts.expectIdent('alias').value : undefined;
-    items.push({ expr, alias, pos: pos(start) });
+    items.push({ expr, alias, pos: { line: start.line, column: start.column } });
   } while (ts.takePunct(','));
+  return items;
+}
+
+function parseReadTail(ts: TokenStream): {
+  orderBy: { expr: Expr; desc: boolean }[];
+  skip?: Expr;
+  limit?: Expr;
+} {
   const orderBy: { expr: Expr; desc: boolean }[] = [];
   if (ts.takeKeyword('ORDER')) {
     ts.expectKeyword('BY');
@@ -321,7 +381,103 @@ function parseReadQuery(ts: TokenStream): ReadQuery {
   }
   const skip = ts.takeKeyword('SKIP') ? parseCountExpr(ts) : undefined;
   const limit = ts.takeKeyword('LIMIT') ? parseCountExpr(ts) : undefined;
-  return { patterns, where, distinct, items, orderBy, skip, limit };
+  return { orderBy, skip, limit };
+}
+
+function parseWriteQuery(ts: TokenStream, prefix: MatchPrefix | undefined): WriteQuery {
+  const clauses: WriteClause[] = [];
+  for (;;) {
+    const t = ts.peek();
+    if (ts.takeKeyword('CREATE')) {
+      const patterns: PathPattern[] = [parsePathPattern(ts)];
+      while (ts.takePunct(',')) patterns.push(parsePathPattern(ts));
+      clauses.push({ clause: 'create', patterns, pos: pos(t) });
+    } else if (ts.takeKeyword('MERGE')) {
+      const pattern = parsePathPattern(ts);
+      const onCreate: SetItem[] = [];
+      const onMatch: SetItem[] = [];
+      while (ts.atKeyword('ON')) {
+        ts.next();
+        if (ts.takeKeyword('CREATE')) {
+          ts.expectKeyword('SET');
+          onCreate.push(...parseSetItems(ts));
+        } else {
+          ts.expectKeyword('MATCH');
+          ts.expectKeyword('SET');
+          onMatch.push(...parseSetItems(ts));
+        }
+      }
+      clauses.push({ clause: 'merge', pattern, onCreate, onMatch, pos: pos(t) });
+    } else if (ts.takeKeyword('SET')) {
+      clauses.push({ clause: 'set', items: parseSetItems(ts), pos: pos(t) });
+    } else if (ts.takeKeyword('REMOVE')) {
+      const items: RemoveItem[] = [];
+      do {
+        const tgt = ts.expectIdent('variable');
+        ts.expectPunct('.');
+        const prop = ts.expectIdent('property');
+        items.push({ target: tgt.value, property: prop.value, pos: pos(tgt) });
+      } while (ts.takePunct(','));
+      clauses.push({ clause: 'remove', items, pos: pos(t) });
+    } else if (ts.atKeyword('DELETE') || ts.atKeyword('DETACH')) {
+      const detach = ts.takeKeyword('DETACH');
+      ts.expectKeyword('DELETE');
+      const targets: Expr[] = [];
+      do {
+        targets.push(parseExpression(ts));
+      } while (ts.takePunct(','));
+      clauses.push({ clause: 'delete', detach, targets, pos: pos(t) });
+    } else {
+      break;
+    }
+  }
+  if (clauses.length === 0) ts.fail('expected a write clause (CREATE, MERGE, SET, REMOVE, DELETE)');
+  let returnItems: ReturnItem[] | undefined;
+  let returnDistinct = false;
+  let tail: { orderBy: { expr: Expr; desc: boolean }[]; skip?: Expr; limit?: Expr } = {
+    orderBy: [],
+  };
+  if (ts.takeKeyword('RETURN')) {
+    returnDistinct = ts.takeKeyword('DISTINCT');
+    returnItems = parseReturnItems(ts);
+    tail = parseReadTail(ts);
+  }
+  return {
+    readMatch: prefix ? { patterns: prefix.patterns, where: prefix.where } : undefined,
+    clauses,
+    returnItems,
+    returnDistinct,
+    orderBy: tail.orderBy,
+    skip: tail.skip,
+    limit: tail.limit,
+  };
+}
+
+function parseSetItems(ts: TokenStream): SetItem[] {
+  const items: SetItem[] = [];
+  do {
+    const tgt = ts.expectIdent('variable');
+    ts.expectPunct('.');
+    const prop = ts.expectIdent('property');
+    ts.expectPunct('=');
+    items.push({
+      target: tgt.value,
+      property: prop.value,
+      value: parseExpression(ts),
+      pos: pos(tgt),
+    });
+  } while (ts.takePunct(','));
+  return items;
+}
+
+// Stub: DDL grammar (CREATE/DROP INDEX, SHOW ...) is implemented in Task 4. Until
+// then no statement is DDL, so the dispatcher always falls through to read/write.
+function tryParseDdl(): DdlStatement | null {
+  return null; // implemented in Task 4
+}
+
+function parseCall(ts: TokenStream): CallStatement {
+  ts.fail('CALL is not yet implemented'); // implemented in Task 6
 }
 
 /** SKIP/LIMIT accept only a non-negative integer literal or a parameter. */
@@ -414,6 +570,55 @@ function parseEdgePattern(ts: TokenStream): EdgePattern {
   return edge;
 }
 
+function validateStatement(stmt: Statement, source: string): void {
+  if (stmt.type === 'read') {
+    validateQuery(stmt.query, source);
+    return;
+  }
+  if (stmt.type === 'write') {
+    validateWriteQuery(stmt.query, source);
+    return;
+  }
+  // ddl/call validated structurally during parsing (Tasks 4, 6)
+}
+
+/**
+ * Shared reference checker for read and write validators. `allowAlias` lets RETURN/ORDER
+ * BY items refer to projection aliases; `allowAggregate` (default false) gates aggregate
+ * calls so WHERE/SET/MERGE reject them while RETURN/ORDER BY permit them.
+ */
+function checkExprRefs(
+  e: Expr,
+  known: Set<string>,
+  source: string,
+  allowAlias: boolean,
+  aliases?: Set<string>,
+  allowAggregate = false,
+): void {
+  const fail = (msg: string, p: Pos): never => {
+    throw new AqlError('SEMANTIC_ERROR', msg, p, source);
+  };
+  walkExpr(e, (x) => {
+    if (x.kind === 'variable' && !known.has(x.name) && !(allowAlias && !!aliases?.has(x.name)))
+      fail(`unknown variable "${x.name}"`, x.pos);
+    if ((x.kind === 'prop' || x.kind === 'exists') && !known.has(x.target))
+      fail(`unknown variable "${x.target}"`, x.pos);
+    if (x.kind === 'call') {
+      if (!AGGREGATES.has(x.func) && !SCALAR_FUNCS.has(x.func))
+        fail(`unknown function "${x.func}"`, x.pos);
+      if (AGGREGATES.has(x.func) && !allowAggregate)
+        fail(`aggregate function "${x.func}" is not allowed here`, x.pos);
+      if (x.arg !== '*' && x.kind === 'call') {
+        // no nested aggregates
+        walkExpr(x.arg, (inner) => {
+          if (inner.kind === 'call' && AGGREGATES.has(inner.func))
+            fail('aggregate functions cannot be nested', inner.pos);
+        });
+      }
+    }
+  });
+}
+
 function validateQuery(q: ReadQuery, source: string): void {
   const fail = (msg: string, p: Pos): never => {
     throw new AqlError('SEMANTIC_ERROR', msg, p, source);
@@ -446,27 +651,6 @@ function validateQuery(q: ReadQuery, source: string): void {
   }
   const known = new Set([...nodeVars, ...edgeVars]);
   const aliases = new Set(q.items.map((i) => i.alias).filter((a): a is string => a !== undefined));
-  const checkRefs = (e: Expr, allowAlias: boolean, allowAggregate: boolean): void => {
-    walkExpr(e, (x) => {
-      if (x.kind === 'variable' && !known.has(x.name) && !(allowAlias && aliases.has(x.name)))
-        fail(`unknown variable "${x.name}"`, x.pos);
-      if ((x.kind === 'prop' || x.kind === 'exists') && !known.has(x.target))
-        fail(`unknown variable "${x.target}"`, x.pos);
-      if (x.kind === 'call') {
-        if (!AGGREGATES.has(x.func) && !SCALAR_FUNCS.has(x.func))
-          fail(`unknown function "${x.func}"`, x.pos);
-        if (AGGREGATES.has(x.func) && !allowAggregate)
-          fail(`aggregate function "${x.func}" is not allowed here`, x.pos);
-        if (x.arg !== '*' && x.kind === 'call') {
-          // no nested aggregates
-          walkExpr(x.arg, (inner) => {
-            if (inner.kind === 'call' && AGGREGATES.has(inner.func))
-              fail('aggregate functions cannot be nested', inner.pos);
-          });
-        }
-      }
-    });
-  };
   // Inline pattern props may reference params/literals only (no variables).
   for (const pat of q.patterns)
     for (const n of pat.nodes)
@@ -475,7 +659,96 @@ function validateQuery(q: ReadQuery, source: string): void {
           if (x.kind === 'variable' || x.kind === 'prop' || x.kind === 'call')
             fail('inline property values must be literals or parameters', x.pos);
         });
-  if (q.where) checkRefs(q.where, false, false);
-  for (const item of q.items) checkRefs(item.expr, false, true);
-  for (const o of q.orderBy) checkRefs(o.expr, true, true);
+  if (q.where) checkExprRefs(q.where, known, source, false, aliases, false);
+  for (const item of q.items) checkExprRefs(item.expr, known, source, false, aliases, true);
+  for (const o of q.orderBy) checkExprRefs(o.expr, known, source, true, aliases, true);
+}
+
+function validateWriteQuery(q: WriteQuery, source: string): void {
+  const fail = (msg: string, p: Pos): never => {
+    throw new AqlError('SEMANTIC_ERROR', msg, p, source);
+  };
+  // Variables bound by the leading MATCH, then progressively by CREATE/MERGE.
+  const bound = new Set<string>();
+  if (q.readMatch) {
+    for (const pat of q.readMatch.patterns) {
+      for (const n of pat.nodes) if (n.variable) bound.add(n.variable);
+      for (const e of pat.edges) if (e.variable) bound.add(e.variable);
+    }
+    if (q.readMatch.where) checkExprRefs(q.readMatch.where, bound, source, false);
+  }
+  const noAggregate = (e: Expr): void =>
+    walkExpr(e, (x) => {
+      if (x.kind === 'call' && AGGREGATES.has(x.func))
+        fail('aggregate functions are not allowed in write expressions', x.pos);
+    });
+  for (const c of q.clauses) {
+    if (c.clause === 'create') {
+      for (const pat of c.patterns) introduceCreatePattern(pat, bound, fail, source);
+    } else if (c.clause === 'merge') {
+      // MERGE introduces its pattern's NEW variables; existing ones must already be bound.
+      introduceCreatePattern(c.pattern, bound, fail, source, true);
+      for (const s of [...c.onCreate, ...c.onMatch]) {
+        if (!bound.has(s.target)) fail(`unknown variable "${s.target}"`, s.pos);
+        noAggregate(s.value);
+        checkExprRefs(s.value, bound, source, false);
+      }
+    } else if (c.clause === 'set') {
+      for (const s of c.items) {
+        if (!bound.has(s.target)) fail(`unknown variable "${s.target}"`, s.pos);
+        noAggregate(s.value);
+        checkExprRefs(s.value, bound, source, false);
+      }
+    } else if (c.clause === 'remove') {
+      for (const r of c.items)
+        if (!bound.has(r.target)) fail(`unknown variable "${r.target}"`, r.pos);
+    } else {
+      for (const t of c.targets) {
+        if (t.kind !== 'variable') {
+          fail('DELETE targets must be plain variables', t.pos);
+          continue;
+        }
+        if (!bound.has(t.name)) fail(`unknown variable "${t.name}"`, t.pos);
+      }
+    }
+  }
+  if (q.returnItems) {
+    const aliases = new Set(q.returnItems.map((i) => i.alias).filter((a): a is string => !!a));
+    for (const item of q.returnItems) checkExprRefs(item.expr, bound, source, true, aliases);
+    for (const o of q.orderBy) checkExprRefs(o.expr, bound, source, true, aliases);
+  }
+}
+
+/** Bind pattern variables; reject re-declaring a bound var with labels/props. */
+function introduceCreatePattern(
+  pat: PathPattern,
+  bound: Set<string>,
+  fail: (msg: string, p: Pos) => never,
+  source: string,
+  isMerge = false,
+): void {
+  for (const n of pat.nodes) {
+    if (n.variable && bound.has(n.variable)) {
+      if (n.labels.length > 0 || n.props.length > 0)
+        fail(
+          `variable "${n.variable}" is already bound; cannot redeclare with labels/properties`,
+          n.pos,
+        );
+    } else if (n.variable) {
+      bound.add(n.variable);
+    }
+    for (const p of n.props)
+      walkExpr(p.value, (x) => {
+        if (x.kind === 'variable' || x.kind === 'prop' || x.kind === 'call')
+          fail('pattern property values must be literals or parameters', x.pos);
+      });
+  }
+  for (const e of pat.edges) {
+    if (e.varLength) fail('variable-length edges are not allowed in CREATE/MERGE', e.pos);
+    if (e.variable) {
+      if (bound.has(e.variable) && !isMerge)
+        fail(`variable "${e.variable}" is already bound`, e.pos);
+      bound.add(e.variable);
+    }
+  }
 }
