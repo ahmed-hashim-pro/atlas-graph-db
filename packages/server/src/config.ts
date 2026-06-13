@@ -6,6 +6,9 @@ export interface ServerConfig {
   queryTimeoutMs: number;
   maxRows: number;
   corsOrigins: string[];
+  rateLimit: number;
+  rateWindowMs: number;
+  staticDir?: string;
 }
 
 export function loadConfig(env: Record<string, string | undefined>): ServerConfig {
@@ -26,5 +29,8 @@ export function loadConfig(env: Record<string, string | undefined>): ServerConfi
     queryTimeoutMs: Number(env.ATLAS_QUERY_TIMEOUT_MS ?? '30000'),
     maxRows: Number(env.ATLAS_MAX_ROWS ?? '100000'),
     corsOrigins: (env.ATLAS_CORS_ORIGINS ?? '').split(',').filter((s) => s.length > 0),
+    rateLimit: Number(env.ATLAS_RATE_LIMIT ?? '600'),
+    rateWindowMs: Number(env.ATLAS_RATE_WINDOW_MS ?? '60000'),
+    staticDir: env.ATLAS_STATIC_DIR,
   };
 }
