@@ -48,14 +48,6 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
     const { status, body } = toProblem(err);
     void reply.status(status).type('application/problem+json').send(body);
   });
-  app.setNotFoundHandler((_req, reply) => {
-    void reply.status(404).type('application/problem+json').send({
-      type: 'about:blank',
-      title: 'Not Found',
-      status: 404,
-      code: 'NOT_FOUND',
-    });
-  });
 
   app.get('/healthz', async () => ({ status: 'ok' }));
 
@@ -67,6 +59,40 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   await registerQueryRoutes(app, ctx);
   await registerTokenRoutes(app, ctx);
   await registerWsRoutes(app, ctx);
+
+  // Not-found handling: when a static SPA dir is configured, serve it with an
+  // index.html fallback for client-side routes; otherwise a plain JSON 404.
+  if (config.staticDir) {
+    const fastifyStatic = (await import('@fastify/static')).default;
+    await app.register(fastifyStatic, { root: config.staticDir, wildcard: false });
+    // SPA fallback: any non-API, non-WS GET that didn't match a file returns index.html.
+    app.setNotFoundHandler((req, reply) => {
+      if (
+        req.method === 'GET' &&
+        !req.url.startsWith('/api') &&
+        !req.url.startsWith('/ws') &&
+        !req.url.startsWith('/metrics') &&
+        !req.url.startsWith('/healthz')
+      ) {
+        return reply.sendFile('index.html');
+      }
+      return reply.status(404).type('application/problem+json').send({
+        type: 'about:blank',
+        title: 'Not Found',
+        status: 404,
+        code: 'NOT_FOUND',
+      });
+    });
+  } else {
+    app.setNotFoundHandler((_req, reply) => {
+      void reply.status(404).type('application/problem+json').send({
+        type: 'about:blank',
+        title: 'Not Found',
+        status: 404,
+        code: 'NOT_FOUND',
+      });
+    });
+  }
 
   // Bootstrap admin once, if configured and no users exist yet.
   if (config.admin && !(await catalog.anyUserExists()))
