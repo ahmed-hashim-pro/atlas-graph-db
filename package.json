@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "typecheck:test": "tsc -p packages/core/test/tsconfig.json && tsc -p packages/core/bench/tsconfig.json && tsc -p packages/datasets/test/tsconfig.json && tsc -p packages/query/test/tsconfig.json && tsc -p packages/protocol/test/tsconfig.json",
+    "typecheck:test": "tsc -p packages/core/test/tsconfig.json && tsc -p packages/core/bench/tsconfig.json && tsc -p packages/datasets/test/tsconfig.json && tsc -p packages/query/test/tsconfig.json && tsc -p packages/protocol/test/tsconfig.json && tsc -p packages/server/test/tsconfig.json",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --check .",
