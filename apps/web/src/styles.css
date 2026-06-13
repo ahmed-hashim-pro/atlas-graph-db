@@ -1,1 +1,87 @@
-/* You can add global styles to this file, and also import other style files */
+/* Midnight Observatory — default (also bound to :root so it applies before JS) */
+:root,
+[data-theme='midnight-observatory'] {
+  --bg: #0b0f1d;
+  --surface: #141a2e;
+  --border: #2a3350;
+  --text: #e6ebff;
+  --text-muted: #9aa6c8;
+  --accent: #6366f1;
+  --accent-2: #22d3ee;
+  --node-1: #6366f1;
+  --node-2: #22d3ee;
+  --node-3: #a855f7;
+  --node-4: #f472b6;
+  --node-5: #34d399;
+  --node-6: #fbbf24;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+}
+
+[data-theme='clean-laboratory'] {
+  --bg: #f7f8fb;
+  --surface: #ffffff;
+  --border: #d9dde7;
+  --text: #1a2233;
+  --text-muted: #5b6577;
+  --accent: #4f46e5;
+  --accent-2: #0ea5e9;
+  --node-1: #4f46e5;
+  --node-2: #0ea5e9;
+  --node-3: #9333ea;
+  --node-4: #db2777;
+  --node-5: #059669;
+  --node-6: #d97706;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+}
+
+[data-theme='neon-terminal'] {
+  --bg: #050806;
+  --surface: #0c120d;
+  --border: #1f3a24;
+  --text: #d6ffe0;
+  --text-muted: #6fae7e;
+  --accent: #22c55e;
+  --accent-2: #4ade80;
+  --node-1: #22c55e;
+  --node-2: #4ade80;
+  --node-3: #16a34a;
+  --node-4: #84cc16;
+  --node-5: #10b981;
+  --node-6: #a3e635;
+  --font: 'JetBrains Mono', 'Fira Code', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+}
+
+button {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
