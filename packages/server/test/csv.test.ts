@@ -3,11 +3,16 @@ import { parseEdgesCsv, parseNodesCsv } from '../src/csv.js';
 
 describe('parseNodesCsv', () => {
   it('parses typed headers into nodes with a tempId column', () => {
-    const csv = 'tempId,:label,name:string,born:number,active:boolean\n1,Person,Ada,1815,true\n2,Person,Charles,1791,false';
+    const csv =
+      'tempId,:label,name:string,born:number,active:boolean\n1,Person,Ada,1815,true\n2,Person,Charles,1791,false';
     const nodes = parseNodesCsv(csv);
     expect(nodes).toEqual([
       { tempId: '1', labels: ['Person'], properties: { name: 'Ada', born: 1815, active: true } },
-      { tempId: '2', labels: ['Person'], properties: { name: 'Charles', born: 1791, active: false } },
+      {
+        tempId: '2',
+        labels: ['Person'],
+        properties: { name: 'Charles', born: 1791, active: false },
+      },
     ]);
   });
 

@@ -11,7 +11,11 @@ function parseId(raw: string): number {
   return n;
 }
 
-async function dbFor(ctx: AppContext, req: FastifyRequest, cap: 'read' | 'write'): Promise<AtlasDatabase> {
+async function dbFor(
+  ctx: AppContext,
+  req: FastifyRequest,
+  cap: 'read' | 'write',
+): Promise<AtlasDatabase> {
   const name = dbNameSchema.parse((req.params as { name: string }).name);
   await requireCapability(ctx.catalog, req.principal!, name, cap);
   return ctx.manager.get(name);

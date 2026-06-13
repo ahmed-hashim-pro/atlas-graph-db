@@ -46,11 +46,29 @@ describe('/metrics endpoint', () => {
   });
 
   it('increments query counter + latency on a query', async () => {
-    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ada', password: 'secret12' } });
-    const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ada', password: 'secret12' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const l = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'ada', password: 'secret12' },
+    });
     const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
-    await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });
-    await app.inject({ method: 'POST', url: '/api/db/kb/query', headers: { cookie }, payload: { query: 'MATCH (n) RETURN n', params: {} } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/db',
+      headers: { cookie },
+      payload: { name: 'kb' },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/query',
+      headers: { cookie },
+      payload: { query: 'MATCH (n) RETURN n', params: {} },
+    });
     const r = await app.inject({ method: 'GET', url: '/metrics' });
     expect(r.body).toMatch(/atlas_queries_total [1-9]/);
   });

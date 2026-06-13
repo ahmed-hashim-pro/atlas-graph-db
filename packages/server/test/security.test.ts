@@ -31,9 +31,17 @@ describe('security headers', () => {
 describe('CORS', () => {
   it('echoes an allowed origin and rejects others', async () => {
     app = await make({ ATLAS_CORS_ORIGINS: 'https://app.example' });
-    const ok = await app.inject({ method: 'OPTIONS', url: '/api/db', headers: { origin: 'https://app.example', 'access-control-request-method': 'GET' } });
+    const ok = await app.inject({
+      method: 'OPTIONS',
+      url: '/api/db',
+      headers: { origin: 'https://app.example', 'access-control-request-method': 'GET' },
+    });
     expect(ok.headers['access-control-allow-origin']).toBe('https://app.example');
-    const bad = await app.inject({ method: 'OPTIONS', url: '/api/db', headers: { origin: 'https://evil.example', 'access-control-request-method': 'GET' } });
+    const bad = await app.inject({
+      method: 'OPTIONS',
+      url: '/api/db',
+      headers: { origin: 'https://evil.example', 'access-control-request-method': 'GET' },
+    });
     expect(bad.headers['access-control-allow-origin']).toBeUndefined();
   });
 });
@@ -41,32 +49,58 @@ describe('CORS', () => {
 describe('rate limiting', () => {
   it('429s a token after exceeding its per-window budget', async () => {
     app = await make({ ATLAS_RATE_LIMIT: '3', ATLAS_RATE_WINDOW_MS: '60000' });
-    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ada', password: 'secret12' } });
-    const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ada', password: 'secret12' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const l = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'ada', password: 'secret12' },
+    });
     const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
     const codes: number[] = [];
-    for (let i = 0; i < 5; i++) codes.push((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode);
+    for (let i = 0; i < 5; i++)
+      codes.push(
+        (await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode,
+      );
     expect(codes.filter((c) => c === 200).length).toBe(3);
     expect(codes.filter((c) => c === 429).length).toBe(2);
   });
 
   it('does not rate-limit /healthz or /metrics', async () => {
     app = await make({ ATLAS_RATE_LIMIT: '1', ATLAS_RATE_WINDOW_MS: '60000' });
-    for (let i = 0; i < 5; i++) expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
+    for (let i = 0; i < 5; i++)
+      expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
   });
 
   it('resets the counter after the window elapses', async () => {
     // Tiny window so the fixed-window reset branch (nowMs >= entry.resetAt) is exercised.
     app = await make({ ATLAS_RATE_LIMIT: '1', ATLAS_RATE_WINDOW_MS: '20' });
-    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'grace', password: 'secret12' } });
-    const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'grace', password: 'secret12' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'grace', password: 'secret12' },
+    });
+    const l = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'grace', password: 'secret12' },
+    });
     const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
     // First request in the window: allowed.
-    expect((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode,
+    ).toBe(200);
     // Second request, still inside the window: over budget -> 429.
-    expect((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode).toBe(429);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode,
+    ).toBe(429);
     // Wait past the window so the next request opens a fresh bucket.
     await new Promise((resolve) => setTimeout(resolve, 40));
-    expect((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode,
+    ).toBe(200);
   });
 });

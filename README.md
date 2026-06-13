@@ -4,11 +4,10 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
-**Status:** M5a — server foundation (`@atlas/server` on Fastify): argon2id auth
-(sessions + API tokens), multi-database manager with the system catalog stored
-as an Atlas database, and REST for auth, database lifecycle, role grants, query,
-and schema — with the spec's permission matrix enforced. WS subscriptions, CRUD,
-import/export, the client SDK, and metrics land in M5b.
+**Status:** M5 complete — production server (`@atlas/server`) and SDK
+(`@atlas/client`): auth, multi-DB, full REST (query, CRUD, import/export, seed),
+WebSocket live updates, Prometheus metrics, rate-limit/CORS/security headers,
+static SPA hosting, Docker deploy. See `docs/api-reference.md`.
 Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`.
 
 ## Develop

@@ -3,8 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./dist/index.js" },
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "types": "./dist/index.d.ts",
-  "dependencies": { "@atlas/protocol": "workspace:*" },
-  "devDependencies": { "@atlas/server": "workspace:*", "fastify": "^5.2.0" }
+  "dependencies": {
+    "@atlas/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@atlas/server": "workspace:*",
+    "fastify": "^5.2.0"
+  }
 }

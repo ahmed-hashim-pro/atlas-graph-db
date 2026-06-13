@@ -72,7 +72,8 @@ interface TypedCol {
 function coerce(raw: string, type: TypedCol['type'], col: string): string | number | boolean {
   if (type === 'number') {
     const n = Number(raw);
-    if (!Number.isFinite(n)) throw new AtlasError('VALIDATION', `column "${col}": "${raw}" is not a number`);
+    if (!Number.isFinite(n))
+      throw new AtlasError('VALIDATION', `column "${col}": "${raw}" is not a number`);
     return n;
   }
   if (type === 'boolean') {
@@ -127,7 +128,8 @@ export function parseEdgesCsv(text: string): ImportEdge[] {
   const fromIdx = headers.indexOf(':from');
   const toIdx = headers.indexOf(':to');
   const typeIdx = headers.indexOf(':type');
-  if (fromIdx === -1 || toIdx === -1) throw new AtlasError('VALIDATION', 'edges CSV requires :from and :to columns');
+  if (fromIdx === -1 || toIdx === -1)
+    throw new AtlasError('VALIDATION', 'edges CSV requires :from and :to columns');
   if (typeIdx === -1) throw new AtlasError('VALIDATION', 'edges CSV requires a :type column');
   const propCols = headers
     .map((h, i) => ({ i, h }))

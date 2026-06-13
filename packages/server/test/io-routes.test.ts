@@ -13,10 +13,23 @@ let cookie: string;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'atlas-io-'));
   app = await buildServer(loadConfig({ ATLAS_DATA_DIR: dir, ATLAS_SECRET: 's'.repeat(32) }));
-  await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ada', password: 'secret12' } });
-  const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ada', password: 'secret12' } });
+  await app.inject({
+    method: 'POST',
+    url: '/api/auth/register',
+    payload: { username: 'ada', password: 'secret12' },
+  });
+  const l = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { username: 'ada', password: 'secret12' },
+  });
   cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
-  await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });
+  await app.inject({
+    method: 'POST',
+    url: '/api/db',
+    headers: { cookie },
+    payload: { name: 'kb' },
+  });
 });
 afterEach(async () => {
   await app.close();
@@ -42,7 +55,11 @@ describe('JSON import/export', () => {
     expect(body.committed).toEqual({ nodes: 2, edges: 1 });
     expect(Object.keys(body.idMap)).toEqual(['a', 'd']);
 
-    const exported = await app.inject({ method: 'GET', url: '/api/db/kb/export', headers: { cookie } });
+    const exported = await app.inject({
+      method: 'GET',
+      url: '/api/db/kb/export',
+      headers: { cookie },
+    });
     const dump = exported.json();
     expect(dump.nodes).toHaveLength(2);
     expect(dump.edges).toHaveLength(1);
@@ -75,11 +92,21 @@ describe('JSON import/export', () => {
       nodes: [{ tempId: 'a', labels: ['P'], properties: {} }],
       edges: [{ from: 'a', to: 'missing', type: 'R', properties: {} }],
     };
-    const partial = await app.inject({ method: 'POST', url: '/api/db/kb/import', headers: { cookie }, payload: bad });
+    const partial = await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/import',
+      headers: { cookie },
+      payload: bad,
+    });
     expect(partial.json().committed.nodes).toBe(1); // node batch committed before the bad edge
     expect(partial.json().error).toMatchObject({ at: { kind: 'edge', index: 0 } });
 
-    const atomic = await app.inject({ method: 'POST', url: '/api/db/kb/import', headers: { cookie }, payload: { ...bad, atomic: true } });
+    const atomic = await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/import',
+      headers: { cookie },
+      payload: { ...bad, atomic: true },
+    });
     expect(atomic.statusCode).toBe(400);
     // nothing from the atomic attempt persisted: only the earlier partial node remains
     const exp = await app.inject({ method: 'GET', url: '/api/db/kb/export', headers: { cookie } });
@@ -103,20 +130,52 @@ describe('JSON import/export', () => {
 
 describe('seed', () => {
   it('seeds science-history (editor+); unknown dataset is 404', async () => {
-    const r = await app.inject({ method: 'POST', url: '/api/db/kb/seed/science-history', headers: { cookie } });
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/seed/science-history',
+      headers: { cookie },
+    });
     expect(r.statusCode).toBe(200);
     expect(r.json().committed.nodes).toBe(500);
-    expect((await app.inject({ method: 'POST', url: '/api/db/kb/seed/nope', headers: { cookie } })).statusCode).toBe(404);
+    expect(
+      (await app.inject({ method: 'POST', url: '/api/db/kb/seed/nope', headers: { cookie } }))
+        .statusCode,
+    ).toBe(404);
   });
 });
 
 describe('permissions', () => {
   it('viewer cannot import/seed but can export', async () => {
-    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'bob', password: 'secret12' } });
-    const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'bob', password: 'secret12' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'bob', password: 'secret12' },
+    });
+    const l = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'bob', password: 'secret12' },
+    });
     const bob = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
-    await app.inject({ method: 'POST', url: '/api/db/kb/roles', headers: { cookie }, payload: { username: 'bob', role: 'viewer' } });
-    expect((await app.inject({ method: 'POST', url: '/api/db/kb/import', headers: { cookie: bob }, payload: { nodes: [], edges: [] } })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'GET', url: '/api/db/kb/export', headers: { cookie: bob } })).statusCode).toBe(200);
+    await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/roles',
+      headers: { cookie },
+      payload: { username: 'bob', role: 'viewer' },
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/db/kb/import',
+          headers: { cookie: bob },
+          payload: { nodes: [], edges: [] },
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/db/kb/export', headers: { cookie: bob } }))
+        .statusCode,
+    ).toBe(200);
   });
 });
