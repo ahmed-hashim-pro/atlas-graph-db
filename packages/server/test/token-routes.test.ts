@@ -54,6 +54,35 @@ describe('API tokens', () => {
     expect((await app.inject({ method: 'GET', url: '/api/tokens', headers: { cookie } })).json()).toHaveLength(0);
   });
 
+  it('cannot revoke another user\'s token (IDOR)', async () => {
+    const ada = await userCookie('ada');
+    const bob = await userCookie('bob');
+    await app.inject({ method: 'POST', url: '/api/db', headers: { cookie: ada }, payload: { name: 'kb' } });
+    const created = await app.inject({ method: 'POST', url: '/api/tokens', headers: { cookie: ada }, payload: { name: 'ci' } });
+    const adaToken = created.json().token as string;
+    const adaTokenId = created.json().tokenId as string;
+
+    // Bob knows ada's (non-secret) token id and tries to revoke it.
+    const del = await app.inject({ method: 'DELETE', url: `/api/tokens/${adaTokenId}`, headers: { cookie: bob } });
+    expect(del.statusCode).toBe(404);
+
+    // Ada's token must survive: she can still list it and authenticate with it.
+    expect((await app.inject({ method: 'GET', url: '/api/tokens', headers: { cookie: ada } })).json()).toHaveLength(1);
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/query',
+      headers: { authorization: `Bearer ${adaToken}` },
+      payload: { query: 'MATCH (n) RETURN count(*) AS c', params: {} },
+    });
+    expect(r.statusCode).toBe(200);
+  });
+
+  it('deleting a non-existent token id returns 404', async () => {
+    const cookie = await userCookie('ada');
+    const del = await app.inject({ method: 'DELETE', url: '/api/tokens/doesnotexist', headers: { cookie } });
+    expect(del.statusCode).toBe(404);
+  });
+
   it('a revoked token no longer authenticates', async () => {
     const cookie = await userCookie('ada');
     await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });

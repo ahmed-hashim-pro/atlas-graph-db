@@ -177,10 +177,24 @@ export class CatalogService {
     return out;
   }
 
-  async revokeToken(username: string, tokenId: string): Promise<void> {
+  /**
+   * Revoke a token, but only if it is owned by `username`. Returns true when a
+   * token was deleted, false when no token owned by the caller matched the id
+   * (either it does not exist or it belongs to another user). Ownership is
+   * enforced here — never trust the token id alone, since ids are returned in
+   * API responses and are not secret (prevents cross-user IDOR revocation).
+   */
+  async revokeToken(username: string, tokenId: string): Promise<boolean> {
     const t = this.tokenNode(tokenId);
-    if (!t) return;
+    if (!t) return false;
+    let owner = '';
+    for (const e of this.db.inEdges(t.id, 'HAS_TOKEN')) {
+      const u = this.db.getNode(e.from);
+      if (u) owner = String(u.props.username);
+    }
+    if (owner !== username) return false;
     await this.db.transact((tx) => tx.deleteNode(t.id, { detach: true }));
+    return true;
   }
 
   // ---- private node lookups (use the unique index via the fluent API) ----
