@@ -305,7 +305,7 @@ export function parseQuery(source: string): ParsedQuery {
 function parseStatement(ts: TokenStream): Statement {
   if (ts.atKeyword('CALL')) return { type: 'call', statement: parseCall(ts) };
   if (ts.atKeyword('SHOW') || ts.atKeyword('CREATE') || ts.atKeyword('DROP')) {
-    const ddl = tryParseDdl();
+    const ddl = tryParseDdl(ts);
     if (ddl) return { type: 'ddl', statement: ddl };
     // CREATE that is not DDL falls through to the write parser below.
   }
@@ -470,10 +470,41 @@ function parseSetItems(ts: TokenStream): SetItem[] {
   return items;
 }
 
-// Stub: DDL grammar (CREATE/DROP INDEX, SHOW ...) is implemented in Task 4. Until
-// then no statement is DDL, so the dispatcher always falls through to read/write.
-function tryParseDdl(): DdlStatement | null {
-  return null; // implemented in Task 4
+function tryParseDdl(ts: TokenStream): DdlStatement | null {
+  const t = ts.peek();
+  if (t.type === 'keyword' && t.value === 'SHOW') {
+    ts.next();
+    if (ts.takeKeyword('INDEXES')) return { stmt: 'showIndexes', pos: pos(t) };
+    if (ts.takeKeyword('CONSTRAINTS')) return { stmt: 'showConstraints', pos: pos(t) };
+    ts.fail('expected INDEXES or CONSTRAINTS after SHOW');
+  }
+  const isCreate = t.type === 'keyword' && t.value === 'CREATE';
+  const isDrop = t.type === 'keyword' && t.value === 'DROP';
+  if (!isCreate && !isDrop) return null;
+  // Look past CREATE/DROP: DDL iff the next token is INDEX, FULLTEXT, or UNIQUE.
+  const n = ts.peek(1);
+  const ddlNext =
+    n.type === 'keyword' && (n.value === 'INDEX' || n.value === 'FULLTEXT' || n.value === 'UNIQUE');
+  if (!ddlNext) return null; // CREATE (node...) write — let the write parser handle it
+  ts.next(); // consume CREATE/DROP
+  let kind: 'property' | 'fulltext' | 'unique' = 'property';
+  if (ts.takeKeyword('FULLTEXT')) {
+    ts.expectKeyword('INDEX');
+    kind = 'fulltext';
+  } else if (ts.takeKeyword('UNIQUE')) {
+    ts.expectKeyword('CONSTRAINT');
+    kind = 'unique';
+  } else {
+    ts.expectKeyword('INDEX');
+    kind = 'property';
+  }
+  ts.expectKeyword('ON');
+  ts.expectPunct(':');
+  const label = ts.expectIdent('label').value;
+  ts.expectPunct('(');
+  const property = ts.expectIdent('property').value;
+  ts.expectPunct(')');
+  return { stmt: isCreate ? 'createIndex' : 'dropIndex', kind, label, property, pos: pos(t) };
 }
 
 function parseCall(ts: TokenStream): CallStatement {
