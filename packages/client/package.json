@@ -8,6 +8,7 @@
   },
   "types": "./dist/index.d.ts",
   "dependencies": {
+    "@atlas/core": "workspace:*",
     "@atlas/protocol": "workspace:*"
   },
   "devDependencies": {

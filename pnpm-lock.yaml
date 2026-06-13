@@ -35,6 +35,9 @@ importers:
 
   packages/client:
     dependencies:
+      '@atlas/core':
+        specifier: workspace:*
+        version: link:../core
       '@atlas/protocol':
         specifier: workspace:*
         version: link:../protocol
