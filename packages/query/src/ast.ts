@@ -57,9 +57,80 @@ export interface ReadQuery {
   limit?: Expr;
 }
 
+export interface SetItem {
+  /** target.property = value, or target += map is out of scope (v1: single prop). */
+  target: string;
+  property: string;
+  value: Expr;
+  pos: Pos;
+}
+
+export interface RemoveItem {
+  target: string;
+  property: string;
+  pos: Pos;
+}
+
+export type WriteClause =
+  | { clause: 'create'; patterns: PathPattern[]; pos: Pos }
+  | {
+      clause: 'merge';
+      pattern: PathPattern;
+      onCreate: SetItem[];
+      onMatch: SetItem[];
+      pos: Pos;
+    }
+  | { clause: 'set'; items: SetItem[]; pos: Pos }
+  | { clause: 'remove'; items: RemoveItem[]; pos: Pos }
+  | { clause: 'delete'; detach: boolean; targets: Expr[]; pos: Pos };
+
+export interface WriteQuery {
+  /** optional leading MATCH providing bindings the write clauses operate on */
+  readMatch?: { patterns: PathPattern[]; where?: Expr };
+  clauses: WriteClause[];
+  /** optional trailing RETURN (projection over post-write bindings) */
+  returnItems?: ReturnItem[];
+  returnDistinct: boolean;
+  orderBy: { expr: Expr; desc: boolean }[];
+  skip?: Expr;
+  limit?: Expr;
+}
+
+export type DdlStatement =
+  | {
+      stmt: 'createIndex';
+      kind: 'property' | 'fulltext' | 'unique';
+      label: string;
+      property: string;
+      pos: Pos;
+    }
+  | {
+      stmt: 'dropIndex';
+      kind: 'property' | 'fulltext' | 'unique';
+      label: string;
+      property: string;
+      pos: Pos;
+    }
+  | { stmt: 'showIndexes'; pos: Pos }
+  | { stmt: 'showConstraints'; pos: Pos };
+
+export interface CallStatement {
+  /** namespaced algorithm name, e.g. "algo.pagerank" */
+  name: string;
+  args: Expr[];
+  yields: { name: string; alias?: string }[];
+  pos: Pos;
+}
+
+export type Statement =
+  | { type: 'read'; query: ReadQuery }
+  | { type: 'write'; query: WriteQuery }
+  | { type: 'ddl'; statement: DdlStatement }
+  | { type: 'call'; statement: CallStatement };
+
 export interface ParsedQuery {
   explain: boolean;
-  query: ReadQuery;
+  statement: Statement;
 }
 
 export const MAX_VAR_HOPS_DEFAULT = 8;
