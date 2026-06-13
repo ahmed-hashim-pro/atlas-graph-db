@@ -85,3 +85,29 @@ export interface QueryResponse {
     propsSet?: number;
   };
 }
+
+const propValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.array(z.number()), z.array(z.boolean())]);
+export const propsSchema = z.record(propValue);
+
+export const NodeCreateReq = z.object({
+  labels: z.array(z.string().min(1)).min(1),
+  properties: propsSchema.default({}),
+});
+export type NodeCreateReq = z.infer<typeof NodeCreateReq>;
+
+export const NodePatchReq = z.object({
+  set: propsSchema.default({}),
+  remove: z.array(z.string()).default([]),
+});
+export type NodePatchReq = z.infer<typeof NodePatchReq>;
+
+export const EdgeCreateReq = z.object({
+  type: z.string().min(1),
+  from: z.number().int().nonnegative(),
+  to: z.number().int().nonnegative(),
+  properties: propsSchema.default({}),
+});
+export type EdgeCreateReq = z.infer<typeof EdgeCreateReq>;
+
+export const EdgePatchReq = NodePatchReq;
+export type EdgePatchReq = z.infer<typeof EdgePatchReq>;
