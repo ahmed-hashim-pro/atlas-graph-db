@@ -99,6 +99,42 @@ describe('RETURN after write', () => {
     expect(result.rows).toEqual([[7]]);
   });
 
+  it('SET-then-RETURN sees the post-write value on the same variable', async () => {
+    await exec('CREATE (:T {v: 1})');
+    const result = await runReturn('MATCH (p:T) SET p.v = 99 RETURN p.v AS v');
+    expect(result.rows).toEqual([[99]]);
+  });
+
+  it('REMOVE-then-RETURN sees null for the removed property', async () => {
+    await exec('CREATE (:T {v: 1})');
+    const result = await runReturn('MATCH (p:T) REMOVE p.v RETURN p.v AS v');
+    expect(result.rows).toEqual([[null]]);
+  });
+
+  it('SET-then-RETURN on a bound edge variable sees the post-write value', async () => {
+    await exec('CREATE (a:P)-[:R]->(b:P)');
+    const result = await runReturn(
+      'MATCH (a:P)-[r:R]->(b:P) SET r.weight = 5 RETURN r.weight AS w',
+    );
+    expect(result.rows).toEqual([[5]]);
+  });
+
+  it('applies ORDER BY and LIMIT to the write-query RETURN tail', async () => {
+    await exec("CREATE (:T {n: 'C'}), (:T {n: 'A'}), (:T {n: 'B'}), (:T {n: 'D'})");
+    const result = await runReturn(
+      'MATCH (p:T) SET p.seen = 1 RETURN p.n AS n ORDER BY p.n LIMIT 2',
+    );
+    expect(result.rows).toEqual([['A'], ['B']]);
+  });
+
+  it('applies ORDER BY DESC and SKIP to the write-query RETURN tail', async () => {
+    await exec("CREATE (:T {n: 'C'}), (:T {n: 'A'}), (:T {n: 'B'}), (:T {n: 'D'})");
+    const result = await runReturn(
+      'MATCH (p:T) SET p.seen = 1 RETURN p.n AS n ORDER BY p.n DESC SKIP 1',
+    );
+    expect(result.rows).toEqual([['C'], ['B'], ['A']]);
+  });
+
   async function runReturn(src: string) {
     const parsed = parseQuery(src);
     if (parsed.statement.type !== 'write') throw new Error('not a write');

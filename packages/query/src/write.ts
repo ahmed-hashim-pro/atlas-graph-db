@@ -1,7 +1,13 @@
 import type { EdgeRecord, GraphStore, NodeId, NodeRecord, Props, TxBuilder } from '@atlas/core';
 import type { Expr, PathPattern, SetItem, WriteClause, WriteQuery } from './ast.js';
 import { AqlError } from './errors.js';
-import { evalExpr, type Binding, type EvalContext, type RuntimeValue } from './eval.js';
+import {
+  compareRuntime,
+  evalExpr,
+  type Binding,
+  type EvalContext,
+  type RuntimeValue,
+} from './eval.js';
 import { matchBindings, type ExecOptions } from './exec.js';
 
 export interface WriteResult {
@@ -11,7 +17,6 @@ export interface WriteResult {
 }
 
 interface WriteCtx {
-  store: GraphStore;
   tx: TxBuilder;
   eval: EvalContext;
   stats: { created: number; deleted: number; propsSet: number };
@@ -80,6 +85,31 @@ function createPattern(pat: PathPattern, ctx: WriteCtx, binding: Binding): void 
   }
 }
 
+/**
+ * Reflect a staged prop change onto the bound record so a trailing RETURN (or a
+ * later clause/ORDER BY) over the same variable observes post-write values. The
+ * store is not mutated until the surrounding tx commits, so an in-tx store
+ * re-read would miss staged ops; instead we clone the bound record (never mutate
+ * the store's own object) and apply the set/removed prop to the clone.
+ */
+function refreshBound(
+  binding: Binding,
+  target: string,
+  property: string,
+  value: RuntimeValue,
+): void {
+  const rec = binding.get(target);
+  if (!rec) return;
+  const props: Props = { ...rec.props };
+  if (value === null) delete props[property];
+  else props[property] = value as Props[string];
+  const next =
+    'type' in rec
+      ? ({ ...(rec as EdgeRecord), props } as EdgeRecord)
+      : ({ ...(rec as NodeRecord), props } as NodeRecord);
+  binding.set(target, next);
+}
+
 function applySet(items: SetItem[], ctx: WriteCtx, binding: Binding): void {
   for (const s of items) {
     const rec = binding.get(s.target);
@@ -103,6 +133,8 @@ function applySet(items: SetItem[], ctx: WriteCtx, binding: Binding): void {
     } else {
       ctx.tx.setNodeProps(rec.id, { [s.property]: v as Props[string] });
     }
+    // Mirror the staged change into the binding so a trailing RETURN sees it.
+    refreshBound(binding, s.target, s.property, v);
     ctx.stats.propsSet++;
   }
 }
@@ -127,6 +159,8 @@ function runClause(clause: WriteClause, ctx: WriteCtx, binding: Binding): void {
           );
         if ('type' in rec) ctx.tx.setEdgeProps(rec.id, {}, [r.property]);
         else ctx.tx.setNodeProps(rec.id, {}, [r.property]);
+        // Mirror the staged removal into the binding so a trailing RETURN sees it.
+        refreshBound(binding, r.target, r.property, null);
         ctx.stats.propsSet++;
       }
       return;
@@ -164,19 +198,18 @@ export function runWrite(
     maxRows: 1_000_000,
   };
   const ctx: WriteCtx = {
-    store,
     tx,
     eval: { params: opts.params, source: opts.source },
     stats: { created: 0, deleted: 0, propsSet: 0 },
   };
   // Rows the write operates on: MATCH results, or a single empty binding.
-  const rows: Binding[] = query.readMatch
+  const baseRows: Binding[] = query.readMatch
     ? matchBindings(query.readMatch.patterns, query.readMatch.where, store, execOpts)
     : [new Map()];
 
   // Per-row post-write bindings, kept in a parallel array (no Map field hack).
   const finals: Binding[] = [];
-  for (const baseBinding of rows) {
+  for (const baseBinding of baseRows) {
     const binding = new Map(baseBinding);
     for (const clause of query.clauses) runClause(clause, ctx, binding);
     finals.push(binding);
@@ -184,22 +217,76 @@ export function runWrite(
 
   // RETURN projection over post-write bindings.
   if (!query.returnItems) return { columns: [], rows: [], stats: ctx.stats };
-  const columns = query.returnItems.map((it, i) => it.alias ?? `col${i}`);
-  let outRows: RuntimeValue[][] = finals.map((b) =>
-    query.returnItems!.map((it) => evalExpr(it.expr, b, ctx.eval)),
-  );
-  if (query.returnDistinct) outRows = dedupRows(outRows);
-  return { columns, rows: outRows, stats: ctx.stats };
+  const returnItems = query.returnItems;
+  const columns = returnItems.map((it, i) => it.alias ?? `col${i}`);
+  // Keep each projected row paired with its source binding so ORDER BY can
+  // resolve by output-column alias OR by re-evaluating against the binding
+  // (mirrors the read-side result stage in exec.ts so semantics match).
+  interface OutRow {
+    values: RuntimeValue[];
+    binding: Binding;
+  }
+  let rows: OutRow[] = finals.map((b) => ({
+    values: returnItems.map((it) => evalExpr(it.expr, b, ctx.eval)),
+    binding: b,
+  }));
+
+  if (query.returnDistinct) {
+    const seen = new Set<string>();
+    rows = rows.filter((r) => {
+      const k = rowKey(r.values);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  }
+
+  if (query.orderBy.length > 0) {
+    const keyFns = query.orderBy.map((o) => {
+      const aliasIdx = o.expr.kind === 'variable' ? columns.indexOf(o.expr.name) : -1;
+      return (r: OutRow): RuntimeValue =>
+        aliasIdx >= 0 ? r.values[aliasIdx]! : evalExpr(o.expr, r.binding, ctx.eval);
+    });
+    rows.sort((a, b) => {
+      for (const [i, o] of query.orderBy.entries()) {
+        const c = compareRuntime(keyFns[i]!(a), keyFns[i]!(b));
+        const cc = c === null ? 0 : c;
+        if (cc !== 0) return o.desc ? -cc : cc;
+      }
+      return 0;
+    });
+  }
+
+  const skip = countOf(query.skip, ctx.eval, opts.source, 'SKIP');
+  const limit = countOf(query.limit, ctx.eval, opts.source, 'LIMIT');
+  if (skip !== undefined || limit !== undefined)
+    rows = rows.slice(skip ?? 0, limit === undefined ? undefined : (skip ?? 0) + limit);
+
+  return { columns, rows: rows.map((r) => r.values), stats: ctx.stats };
 }
 
-function dedupRows(rows: RuntimeValue[][]): RuntimeValue[][] {
-  const seen = new Set<string>();
-  return rows.filter((r) => {
-    const k = JSON.stringify(
-      r.map((v) => (v && typeof v === 'object' && 'id' in v ? `#${v.id}` : v)),
+/** Resolve SKIP/LIMIT (literal or param) to a non-negative integer; mirrors exec.ts countOf. */
+function countOf(
+  e: Expr | undefined,
+  ctx: EvalContext,
+  source: string,
+  what: string,
+): number | undefined {
+  if (e === undefined) return undefined;
+  const v = evalExpr(e, new Map(), ctx);
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0)
+    throw new AqlError(
+      'RUNTIME_ERROR',
+      `${what} expects a non-negative integer, got ${String(v)}`,
+      e.pos,
+      source,
     );
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  return v;
+}
+
+/** Stable dedup key for DISTINCT: records by id, everything else by JSON. */
+function rowKey(values: RuntimeValue[]): string {
+  return JSON.stringify(
+    values.map((v) => (v && typeof v === 'object' && 'id' in v ? `#${v.id}` : v)),
+  );
 }
