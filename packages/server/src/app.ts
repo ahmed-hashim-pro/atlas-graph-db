@@ -5,24 +5,21 @@ import { CatalogService } from './catalog.js';
 import { hashPassword } from './crypto.js';
 import { DatabaseManager } from './db-manager.js';
 import { toProblem } from './errors.js';
+import { MetricsRegistry } from './metrics.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerDatabaseRoutes } from './routes/databases.js';
 import { registerDataRoutes } from './routes/data.js';
 import { registerIoRoutes } from './routes/io.js';
+import { registerMetricsRoutes } from './routes/metrics.js';
 import { registerQueryRoutes } from './routes/query.js';
 import { registerTokenRoutes } from './routes/tokens.js';
 import { registerWsRoutes } from './routes/ws.js';
-
-/** Minimal metrics surface used by the WS route; Task 5 replaces this with the real MetricsRegistry. */
-export interface Metrics {
-  wsSubscribers: { inc(): void; dec(): void };
-}
 
 export interface AppContext {
   catalog: CatalogService;
   manager: DatabaseManager;
   config: ServerConfig;
-  metrics: Metrics;
+  metrics: MetricsRegistry;
 }
 
 export async function buildServer(config: ServerConfig): Promise<FastifyInstance> {
@@ -30,7 +27,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   const { join } = await import('node:path');
   const catalog = await CatalogService.open(join(config.dataDir, '_catalog'));
   const manager = new DatabaseManager(config.dataDir);
-  const metrics: Metrics = { wsSubscribers: { inc() {}, dec() {} } };
+  const metrics = new MetricsRegistry();
   const ctx: AppContext = { catalog, manager, config, metrics };
 
   await app.register(fastifyCookie, { secret: config.secret });
@@ -57,6 +54,7 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   await registerDatabaseRoutes(app, ctx);
   await registerDataRoutes(app, ctx);
   await registerIoRoutes(app, ctx);
+  await registerMetricsRoutes(app, ctx);
   await registerQueryRoutes(app, ctx);
   await registerTokenRoutes(app, ctx);
   await registerWsRoutes(app, ctx);
