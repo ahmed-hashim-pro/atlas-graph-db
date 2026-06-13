@@ -10,8 +10,8 @@ import { HttpError } from '../errors.js';
 function batchMatches(ops: Op[], labels: Set<string> | null, types: Set<string> | null): boolean {
   if (!labels && !types) return true;
   for (const op of ops) {
-    if (labels && (op.op === 'createNode') && op.labels.some((l) => labels.has(l))) return true;
-    if (types && (op.op === 'createEdge') && types.has(op.type)) return true;
+    if (labels && op.op === 'createNode' && op.labels.some((l) => labels.has(l))) return true;
+    if (types && op.op === 'createEdge' && types.has(op.type)) return true;
     // setNodeProps/deleteNode/deleteEdge carry no label/type; conservatively included only
     // when no filter is set (handled above) — filtered subscriptions see create-shaped ops.
   }

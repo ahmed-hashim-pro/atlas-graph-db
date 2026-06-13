@@ -18,11 +18,31 @@ beforeEach(async () => {
   await app.listen({ port: 0, host: '127.0.0.1' });
   const addr = app.server.address();
   url = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
-  await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ada', password: 'secret12' } });
-  const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ada', password: 'secret12' } });
+  await app.inject({
+    method: 'POST',
+    url: '/api/auth/register',
+    payload: { username: 'ada', password: 'secret12' },
+  });
+  const l = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { username: 'ada', password: 'secret12' },
+  });
   const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
-  await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });
-  token = (await app.inject({ method: 'POST', url: '/api/tokens', headers: { cookie }, payload: { name: 't' } })).json().token;
+  await app.inject({
+    method: 'POST',
+    url: '/api/db',
+    headers: { cookie },
+    payload: { name: 'kb' },
+  });
+  token = (
+    await app.inject({
+      method: 'POST',
+      url: '/api/tokens',
+      headers: { cookie },
+      payload: { name: 't' },
+    })
+  ).json().token;
 });
 afterEach(async () => {
   await app.close();
@@ -40,7 +60,10 @@ describe('@atlas/client', () => {
 
   it('surfaces server errors as thrown AtlasClientError with code + status', async () => {
     const db = connect(url, { token }).database('kb');
-    await expect(db.query('MATCH (n RETURN n', {})).rejects.toMatchObject({ code: 'PARSE_ERROR', status: 400 });
+    await expect(db.query('MATCH (n RETURN n', {})).rejects.toMatchObject({
+      code: 'PARSE_ERROR',
+      status: 400,
+    });
   });
 
   it('subscribe() delivers live change batches and unsubscribes', async () => {

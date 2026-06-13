@@ -15,7 +15,9 @@ beforeEach(async () => {
   staticDir = join(dir, 'web');
   await mkdir(staticDir, { recursive: true });
   await writeFile(join(staticDir, 'index.html'), '<!doctype html><title>Atlas</title>');
-  app = await buildServer(loadConfig({ ATLAS_DATA_DIR: dir, ATLAS_SECRET: 's'.repeat(32), ATLAS_STATIC_DIR: staticDir }));
+  app = await buildServer(
+    loadConfig({ ATLAS_DATA_DIR: dir, ATLAS_SECRET: 's'.repeat(32), ATLAS_STATIC_DIR: staticDir }),
+  );
 });
 afterEach(async () => {
   await app.close();

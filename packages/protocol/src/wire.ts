@@ -86,7 +86,14 @@ export interface QueryResponse {
   };
 }
 
-const propValue = z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.array(z.number()), z.array(z.boolean())]);
+const propValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+  z.array(z.number()),
+  z.array(z.boolean()),
+]);
 export const propsSchema = z.record(propValue);
 
 export const NodeCreateReq = z.object({

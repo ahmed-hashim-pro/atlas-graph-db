@@ -38,7 +38,12 @@ export class Database {
     });
     if (!res.ok) {
       const problem = (await res.json().catch(() => undefined)) as ProblemDetails | undefined;
-      throw new AtlasClientError(problem?.code ?? 'ERROR', res.status, problem?.detail ?? res.statusText, problem);
+      throw new AtlasClientError(
+        problem?.code ?? 'ERROR',
+        res.status,
+        problem?.detail ?? res.statusText,
+        problem,
+      );
     }
     return (await res.json()) as QueryResponse;
   }

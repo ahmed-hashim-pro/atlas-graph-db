@@ -47,7 +47,8 @@ async function runImport(db: AtlasDatabase, imp: NormalizedImport): Promise<Impo
       await db.transact((tx) => {
         for (const n of imp.nodes) idMap.set(n.tempId, tx.createNode(n.labels, n.properties));
         for (const [i, e] of imp.edges.entries()) {
-          const from = idMap.get(e.from) ?? (Number.isInteger(Number(e.from)) ? Number(e.from) : undefined);
+          const from =
+            idMap.get(e.from) ?? (Number.isInteger(Number(e.from)) ? Number(e.from) : undefined);
           const to = idMap.get(e.to) ?? (Number.isInteger(Number(e.to)) ? Number(e.to) : undefined);
           if (from === undefined || to === undefined)
             throw new AtlasError('VALIDATION', `edge ${i}: unresolved endpoint`);
@@ -60,7 +61,10 @@ async function runImport(db: AtlasDatabase, imp: NormalizedImport): Promise<Impo
       if (err instanceof AtlasError) throw err;
       throw new AtlasError('VALIDATION', (err as Error).message);
     }
-    return { committed: { nodes: committedNodes, edges: committedEdges }, idMap: Object.fromEntries(idMap) };
+    return {
+      committed: { nodes: committedNodes, edges: committedEdges },
+      idMap: Object.fromEntries(idMap),
+    };
   }
 
   // Non-atomic: batched; on first error, stop and report what committed.
@@ -74,7 +78,12 @@ async function runImport(db: AtlasDatabase, imp: NormalizedImport): Promise<Impo
   for (let i = 0; i < imp.edges.length; i += BATCH) {
     const slice = imp.edges.slice(i, i + BATCH);
     try {
-      const localRefs: { from: number; to: number; type: string; props: typeof slice[number]['properties'] }[] = [];
+      const localRefs: {
+        from: number;
+        to: number;
+        type: string;
+        props: (typeof slice)[number]['properties'];
+      }[] = [];
       for (const [j, e] of slice.entries()) {
         const from = resolveRef(e.from, idMap, db);
         const to = resolveRef(e.to, idMap, db);
@@ -98,7 +107,10 @@ async function runImport(db: AtlasDatabase, imp: NormalizedImport): Promise<Impo
       };
     }
   }
-  return { committed: { nodes: committedNodes, edges: committedEdges }, idMap: Object.fromEntries(idMap) };
+  return {
+    committed: { nodes: committedNodes, edges: committedEdges },
+    idMap: Object.fromEntries(idMap),
+  };
 }
 
 export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
@@ -129,8 +141,17 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
     await requireCapability(ctx.catalog, req.principal!, name, 'read');
     const db = await ctx.manager.get(name);
     const store = db.graphStore;
-    const nodes = [...store.nodes.values()].map((n) => ({ tempId: String(n.id), labels: n.labels, properties: n.props }));
-    const edges = [...store.edges.values()].map((e) => ({ from: String(e.from), to: String(e.to), type: e.type, properties: e.props }));
+    const nodes = [...store.nodes.values()].map((n) => ({
+      tempId: String(n.id),
+      labels: n.labels,
+      properties: n.props,
+    }));
+    const edges = [...store.edges.values()].map((e) => ({
+      from: String(e.from),
+      to: String(e.to),
+      type: e.type,
+      properties: e.props,
+    }));
     return { nodes, edges };
   });
 
@@ -138,7 +159,8 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
     const name = dbNameSchema.parse((req.params as { name: string }).name);
     await requireCapability(ctx.catalog, req.principal!, name, 'write');
     const dataset = (req.params as { dataset: string }).dataset;
-    if (dataset !== 'science-history') throw new HttpError(404, 'NOT_FOUND', `unknown dataset "${dataset}"`);
+    if (dataset !== 'science-history')
+      throw new HttpError(404, 'NOT_FOUND', `unknown dataset "${dataset}"`);
     const db = await ctx.manager.get(name);
     await loadDataset(db, scienceHistory());
     return { committed: { nodes: db.stats().nodeCount, edges: db.stats().edgeCount } };

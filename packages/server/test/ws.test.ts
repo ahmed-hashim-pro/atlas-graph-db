@@ -18,11 +18,29 @@ beforeEach(async () => {
   const addr = app.server.address();
   const port = typeof addr === 'object' && addr ? addr.port : 0;
   baseUrl = `127.0.0.1:${port}`;
-  await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ada', password: 'secret12' } });
-  const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ada', password: 'secret12' } });
+  await app.inject({
+    method: 'POST',
+    url: '/api/auth/register',
+    payload: { username: 'ada', password: 'secret12' },
+  });
+  const login = await app.inject({
+    method: 'POST',
+    url: '/api/auth/login',
+    payload: { username: 'ada', password: 'secret12' },
+  });
   const cookie = `atlas_session=${login.cookies.find((c) => c.name === 'atlas_session')!.value}`;
-  await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });
-  const created = await app.inject({ method: 'POST', url: '/api/tokens', headers: { cookie }, payload: { name: 'ws' } });
+  await app.inject({
+    method: 'POST',
+    url: '/api/db',
+    headers: { cookie },
+    payload: { name: 'kb' },
+  });
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/tokens',
+    headers: { cookie },
+    payload: { name: 'ws' },
+  });
   token = created.json().token as string;
 });
 afterEach(async () => {
@@ -30,7 +48,9 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-function open(path: string): Promise<{ ws: WebSocket; frames: unknown[]; next: () => Promise<unknown> }> {
+function open(
+  path: string,
+): Promise<{ ws: WebSocket; frames: unknown[]; next: () => Promise<unknown> }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://${baseUrl}${path}`);
     const frames: unknown[] = [];
