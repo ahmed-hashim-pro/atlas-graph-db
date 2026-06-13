@@ -4,10 +4,10 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
-**Status:** M4a — AQL read pipeline (`@atlas/query`): lexer → parser →
-selectivity-based planner (EXPLAIN as JSON) → guarded executor. MATCH with
-variable-length hops, WHERE, RETURN aggregations, ORDER BY/SKIP/LIMIT,
-$parameters, caret-annotated errors. Writes/DDL/CALL land in M4b.
+**Status:** M4 complete — full AQL (`@atlas/query`): reads (MATCH/WHERE/RETURN,
+aggregations, variable-length paths), writes (CREATE/MERGE/SET/REMOVE/DELETE),
+schema DDL, and `CALL algo.*`, all atomic and EXPLAIN-able. See
+`docs/aql-reference.md`.
 Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`.
 
 ## Develop
