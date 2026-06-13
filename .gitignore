@@ -7,3 +7,7 @@ data/
 .idea/
 *.tsbuildinfo
 .DS_Store
+.angular/
+apps/web/.angular/
+apps/web/dist/
+apps/web/out-tsc/
