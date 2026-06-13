@@ -1,6 +1,7 @@
 import { AtlasError } from '@atlas/core';
 import { AqlError } from '@atlas/query';
 import type { ProblemDetails } from '@atlas/protocol';
+import { ZodError } from 'zod';
 
 const ENGINE_STATUS: Record<string, number> = {
   VALIDATION: 400,
@@ -33,6 +34,12 @@ export class HttpError extends Error {
 }
 
 export function toProblem(err: unknown): { status: number; body: ProblemDetails } {
+  if (err instanceof ZodError) {
+    return {
+      status: 400,
+      body: { type: 'about:blank', title: 'Bad Request', status: 400, detail: err.message, code: 'VALIDATION' },
+    };
+  }
   if (err instanceof AqlError) {
     const status = AQL_STATUS[err.code] ?? 400;
     return {
