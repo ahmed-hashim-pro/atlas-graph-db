@@ -1,4 +1,4 @@
-import type { Expr } from './ast.js';
+import type { CallStatement, DdlStatement, Expr, WriteQuery } from './ast.js';
 
 export type PlanNode =
   | { op: 'AllNodesScan'; variable: string; estCost: number }
@@ -92,4 +92,27 @@ export function serializePlan(node: PlanNode): Record<string, unknown> {
     else out[key] = value;
   }
   return out;
+}
+
+export function describeWritePlan(q: WriteQuery): Record<string, unknown> {
+  const steps: Record<string, unknown>[] = [];
+  if (q.readMatch) steps.push({ op: 'Match', patterns: q.readMatch.patterns.length });
+  for (const c of q.clauses) {
+    if (c.clause === 'create') steps.push({ op: 'Create', patterns: c.patterns.length });
+    else if (c.clause === 'merge')
+      steps.push({ op: 'Merge', onCreate: c.onCreate.length, onMatch: c.onMatch.length });
+    else if (c.clause === 'set') steps.push({ op: 'SetProps', items: c.items.length });
+    else if (c.clause === 'remove') steps.push({ op: 'RemoveProps', items: c.items.length });
+    else steps.push({ op: 'Delete', detach: c.detach, targets: c.targets.length });
+  }
+  if (q.returnItems) steps.push({ op: 'Project', columns: q.returnItems.length });
+  return { op: 'Write', steps };
+}
+
+export function describeDdlPlan(s: DdlStatement): Record<string, unknown> {
+  return { op: 'Ddl', ...s };
+}
+
+export function describeCallPlan(s: CallStatement): Record<string, unknown> {
+  return { op: 'Call', name: s.name, yields: s.yields.map((y) => y.alias ?? y.name) };
 }
