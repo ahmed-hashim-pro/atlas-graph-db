@@ -1,0 +1,29 @@
+<main class="auth-card">
+  <h1>Create your Atlas account</h1>
+  <form (ngSubmit)="submit()">
+    <label for="reg-username">Username</label>
+    <input
+      id="reg-username"
+      name="username"
+      [ngModel]="username()"
+      (ngModelChange)="username.set($event)"
+      autocomplete="username"
+      required
+    />
+    <label for="reg-password">Password</label>
+    <input
+      id="reg-password"
+      name="password"
+      type="password"
+      [ngModel]="password()"
+      (ngModelChange)="password.set($event)"
+      autocomplete="new-password"
+      required
+    />
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+    <button type="submit" [disabled]="busy()">{{ busy() ? 'Creating…' : 'Create account' }}</button>
+  </form>
+  <p>Already have an account? <a routerLink="/login">Sign in</a>.</p>
+</main>
