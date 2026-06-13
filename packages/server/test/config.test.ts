@@ -18,9 +18,9 @@ describe('loadConfig', () => {
 
   it('throws when a required value is missing or the secret is too short', () => {
     expect(() => loadConfig({})).toThrow();
-    expect(() =>
-      loadConfig({ ATLAS_DATA_DIR: '/tmp/a', ATLAS_SECRET: 'short' }),
-    ).toThrow(/secret/i);
+    expect(() => loadConfig({ ATLAS_DATA_DIR: '/tmp/a', ATLAS_SECRET: 'short' })).toThrow(
+      /secret/i,
+    );
   });
 
   it('admin bootstrap is optional (absent → no admin seeding)', () => {

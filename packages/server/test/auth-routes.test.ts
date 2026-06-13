@@ -78,8 +78,16 @@ describe('auth routes', () => {
   });
 
   it('logout clears the session', async () => {
-    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'ada', password: 'secret12' } });
-    const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'ada', password: 'secret12' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'ada', password: 'secret12' },
+    });
     const cookie = cookieFrom(login);
     const out = await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
     expect(out.statusCode).toBe(200);

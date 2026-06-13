@@ -48,7 +48,11 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
 
   // Bootstrap admin once, if configured and no users exist yet.
   if (config.admin && !(await catalog.anyUserExists()))
-    await catalog.createUser(config.admin.username, await hashPassword(config.admin.password), true);
+    await catalog.createUser(
+      config.admin.username,
+      await hashPassword(config.admin.password),
+      true,
+    );
 
   app.addHook('onClose', async () => {
     await manager.closeAll();

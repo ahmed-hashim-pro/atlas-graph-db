@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { generateToken, hashPassword, hashToken, verifyPassword, verifyToken } from '../src/crypto.js';
+import {
+  generateToken,
+  hashPassword,
+  hashToken,
+  verifyPassword,
+  verifyToken,
+} from '../src/crypto.js';
 
 describe('password hashing (argon2id)', () => {
   it('verifies a correct password and rejects a wrong one', async () => {
@@ -25,7 +31,7 @@ describe('API tokens', () => {
   });
 
   it('hashToken is deterministic enough to look up, verifyToken confirms', async () => {
-    const { token, hash } = await generateToken();
+    const { token } = await generateToken();
     // hashToken is argon2id (salted) — NOT used as a lookup key; verifyToken does the check.
     const other = await hashToken(token);
     expect(await verifyToken(other, token)).toBe(true);

@@ -25,7 +25,9 @@ export class CatalogService {
     const db = await openDatabase(dir);
     // Idempotent constraint setup.
     const ensure = async (kind: 'unique', label: string, property: string): Promise<void> => {
-      const have = db.listIndexes().some((d) => d.kind === kind && d.label === label && d.property === property);
+      const have = db
+        .listIndexes()
+        .some((d) => d.kind === kind && d.label === label && d.property === property);
       if (!have) await db.createIndex({ kind, label, property });
     };
     await ensure('unique', 'User', 'username');
@@ -91,7 +93,8 @@ export class CatalogService {
     await this.db.transact((tx) => {
       // Remove any existing grant edge first (regrant replaces).
       for (const edgeType of ['OWNER', 'EDITOR', 'VIEWER'])
-        for (const e of this.db.outEdges(user.id, edgeType)) if (e.to === dbNode.id) tx.deleteEdge(e.id);
+        for (const e of this.db.outEdges(user.id, edgeType))
+          if (e.to === dbNode.id) tx.deleteEdge(e.id);
       tx.createEdge(ROLE_EDGE[role], user.id, dbNode.id);
     });
   }
@@ -102,7 +105,8 @@ export class CatalogService {
     if (!user || !dbNode) return;
     await this.db.transact((tx) => {
       for (const edgeType of ['OWNER', 'EDITOR', 'VIEWER'])
-        for (const e of this.db.outEdges(user.id, edgeType)) if (e.to === dbNode.id) tx.deleteEdge(e.id);
+        for (const e of this.db.outEdges(user.id, edgeType))
+          if (e.to === dbNode.id) tx.deleteEdge(e.id);
     });
   }
 
@@ -111,7 +115,8 @@ export class CatalogService {
     const dbNode = this.dbNode(dbName);
     if (!user || !dbNode) return null;
     for (const edgeType of ['OWNER', 'EDITOR', 'VIEWER'])
-      for (const e of this.db.outEdges(user.id, edgeType)) if (e.to === dbNode.id) return EDGE_ROLE[edgeType]!;
+      for (const e of this.db.outEdges(user.id, edgeType))
+        if (e.to === dbNode.id) return EDGE_ROLE[edgeType]!;
     return null;
   }
 
@@ -126,14 +131,21 @@ export class CatalogService {
     return owners.sort();
   }
 
-  async listDatabasesFor(username: string): Promise<{ name: string; description: string; role: RoleName }[]> {
+  async listDatabasesFor(
+    username: string,
+  ): Promise<{ name: string; description: string; role: RoleName }[]> {
     const user = this.userNode(username);
     if (!user) return [];
     const out: { name: string; description: string; role: RoleName }[] = [];
     for (const edgeType of ['OWNER', 'EDITOR', 'VIEWER'])
       for (const e of this.db.outEdges(user.id, edgeType)) {
         const d = this.db.getNode(e.to);
-        if (d) out.push({ name: String(d.props.name), description: String(d.props.description ?? ''), role: EDGE_ROLE[edgeType]! });
+        if (d)
+          out.push({
+            name: String(d.props.name),
+            description: String(d.props.description ?? ''),
+            role: EDGE_ROLE[edgeType]!,
+          });
       }
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -199,13 +211,31 @@ export class CatalogService {
 
   // ---- private node lookups (use the unique index via the fluent API) ----
   private userNode(username: string) {
-    return this.db.graph().nodes('User').where((p) => p.username === username).first() ?? null;
+    return (
+      this.db
+        .graph()
+        .nodes('User')
+        .where((p) => p.username === username)
+        .first() ?? null
+    );
   }
   private dbNode(name: string) {
-    return this.db.graph().nodes('Database').where((p) => p.name === name).first() ?? null;
+    return (
+      this.db
+        .graph()
+        .nodes('Database')
+        .where((p) => p.name === name)
+        .first() ?? null
+    );
   }
   private tokenNode(tokenId: string) {
-    return this.db.graph().nodes('Token').where((p) => p.tokenId === tokenId).first() ?? null;
+    return (
+      this.db
+        .graph()
+        .nodes('Token')
+        .where((p) => p.tokenId === tokenId)
+        .first() ?? null
+    );
   }
   private requireUserNode(username: string): { id: NodeId } {
     const n = this.userNode(username);

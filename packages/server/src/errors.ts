@@ -37,7 +37,13 @@ export function toProblem(err: unknown): { status: number; body: ProblemDetails 
   if (err instanceof ZodError) {
     return {
       status: 400,
-      body: { type: 'about:blank', title: 'Bad Request', status: 400, detail: err.message, code: 'VALIDATION' },
+      body: {
+        type: 'about:blank',
+        title: 'Bad Request',
+        status: 400,
+        detail: err.message,
+        code: 'VALIDATION',
+      },
     };
   }
   if (err instanceof AqlError) {
@@ -60,13 +66,25 @@ export function toProblem(err: unknown): { status: number; body: ProblemDetails 
     const status = ENGINE_STATUS[err.code] ?? 500;
     return {
       status,
-      body: { type: 'about:blank', title: 'Engine Error', status, detail: err.message, code: err.code },
+      body: {
+        type: 'about:blank',
+        title: 'Engine Error',
+        status,
+        detail: err.message,
+        code: err.code,
+      },
     };
   }
   if (err instanceof HttpError) {
     return {
       status: err.status,
-      body: { type: 'about:blank', title: httpTitle(err.status), status: err.status, detail: err.message, code: err.code },
+      body: {
+        type: 'about:blank',
+        title: httpTitle(err.status),
+        status: err.status,
+        detail: err.message,
+        code: err.code,
+      },
     };
   }
   return {
