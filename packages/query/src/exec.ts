@@ -9,7 +9,9 @@ import {
   type RuntimeValue,
 } from './eval.js';
 import { renderExpr, type PlanNode } from './plan.js';
-import { isAggregateItem } from './planner.js';
+import { isAggregateItem, planQuery } from './planner.js';
+
+export type { Binding } from './eval.js';
 
 export interface ExecOptions {
   params: Record<string, unknown>;
@@ -80,6 +82,207 @@ function hasAllLabels(n: NodeRecord, labels: string[]): boolean {
   return labels.every((l) => n.labels.includes(l));
 }
 
+function* edgesFor(
+  store: GraphStore,
+  id: number,
+  types: string[],
+  direction: 'out' | 'in' | 'both',
+): IterableIterator<{ edge: EdgeRecord; other: number }> {
+  const typeList: (string | undefined)[] = types.length === 0 ? [undefined] : types;
+  const seen = direction === 'both' ? new Set<number>() : undefined;
+  for (const t of typeList) {
+    if (direction !== 'in')
+      for (const e of store.outEdges(id, t)) {
+        if (seen) {
+          if (seen.has(e.id)) continue;
+          seen.add(e.id);
+        }
+        yield { edge: e, other: e.to };
+      }
+    if (direction !== 'out')
+      for (const e of store.inEdges(id, t)) {
+        if (seen) {
+          if (seen.has(e.id)) continue;
+          seen.add(e.id);
+        }
+        yield { edge: e, other: e.from };
+      }
+  }
+}
+
+function extend(b: Binding, key: string, value: NodeRecord | EdgeRecord): Binding {
+  const next = new Map(b);
+  next.set(key, value);
+  return next;
+}
+
+/**
+ * The binding-subtree walker shared by runRead and the write executor's
+ * matchBindings. Yields one Binding per match row, bumping `guard` for cost
+ * accounting and evaluating filters/index seeks against `store` via `ctx`.
+ */
+function* bindings(
+  node: PlanNode,
+  store: GraphStore,
+  guard: Guard,
+  ctx: EvalContext,
+): Generator<Binding> {
+  switch (node.op) {
+    case 'AllNodesScan': {
+      for (const n of store.nodes.values()) {
+        guard.bump();
+        yield new Map([[node.variable, n]]);
+      }
+      return;
+    }
+    case 'LabelScan': {
+      for (const n of store.nodesByLabel(node.label)) {
+        guard.bump();
+        yield new Map([[node.variable, n]]);
+      }
+      return;
+    }
+    case 'IndexSeek': {
+      const v = evalExpr(node.valueAst, new Map(), ctx);
+      if (v === null || Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date))) return;
+      for (const id of store.indexes.lookupExact(node.label, node.property, v) ?? []) {
+        guard.bump();
+        const n = store.getNode(id);
+        if (n) yield new Map([[node.variable, n]]);
+      }
+      return;
+    }
+    case 'FromBound':
+      throw new AqlError(
+        'RUNTIME_ERROR',
+        'unspliced FromBound reached the executor',
+        ORIGIN,
+        ctx.source,
+      );
+    case 'Filter': {
+      for (const b of bindings(node.child, store, guard, ctx)) {
+        if (evalExpr(node.exprAst, b, ctx) === true) yield b;
+      }
+      return;
+    }
+    case 'Expand': {
+      for (const b of bindings(node.child, store, guard, ctx)) {
+        const from = b.get(node.from) as NodeRecord;
+        for (const { edge, other } of edgesFor(store, from.id, node.types, node.direction)) {
+          guard.bump();
+          const target = store.getNode(other)!;
+          if (!hasAllLabels(target, node.toLabels)) continue;
+          const boundTo = b.get(node.to);
+          if (boundTo !== undefined && (boundTo as NodeRecord).id !== target.id) continue;
+          if (node.edgeVariable !== undefined) {
+            const boundEdge = b.get(node.edgeVariable);
+            if (boundEdge !== undefined && (boundEdge as EdgeRecord).id !== edge.id) continue;
+          }
+          let next = boundTo === undefined ? extend(b, node.to, target) : b;
+          if (node.edgeVariable !== undefined && b.get(node.edgeVariable) === undefined)
+            next = extend(next, node.edgeVariable, edge);
+          yield next;
+        }
+      }
+      return;
+    }
+    case 'VarLengthExpand': {
+      for (const b of bindings(node.child, store, guard, ctx)) {
+        const from = b.get(node.from) as NodeRecord;
+        // One row per distinct edge-unique path with length in [min, max].
+        const stack: { id: number; depth: number; used: Set<number> }[] = [
+          { id: from.id, depth: 0, used: new Set() },
+        ];
+        while (stack.length > 0) {
+          const cur = stack.pop()!;
+          if (cur.depth >= node.min && cur.depth > 0) {
+            guard.bump();
+            const target = store.getNode(cur.id)!;
+            if (hasAllLabels(target, node.toLabels)) {
+              const boundTo = b.get(node.to);
+              if (boundTo === undefined) yield extend(b, node.to, target);
+              else if ((boundTo as NodeRecord).id === target.id) yield b;
+            }
+          }
+          if (cur.depth >= node.max) continue;
+          for (const { edge, other } of edgesFor(store, cur.id, node.types, node.direction)) {
+            guard.bump();
+            if (cur.used.has(edge.id)) continue;
+            stack.push({ id: other, depth: cur.depth + 1, used: new Set(cur.used).add(edge.id) });
+          }
+        }
+      }
+      return;
+    }
+    case 'CartesianProduct': {
+      const rights: Binding[] = [...bindings(node.right, store, guard, ctx)];
+      for (const l of bindings(node.left, store, guard, ctx)) {
+        for (const r of rights) {
+          guard.bump();
+          const merged = new Map(l);
+          for (const [k, v] of r) merged.set(k, v);
+          yield merged;
+        }
+      }
+      return;
+    }
+    default:
+      throw new AqlError(
+        'RUNTIME_ERROR',
+        `unexpected plan op ${node.op} in binding subtree`,
+        ORIGIN,
+        ctx.source,
+      );
+  }
+}
+
+/**
+ * Descend a plan past its result-stage operators to the binding subtree, then
+ * eagerly collect every match row. Eager (not lazy) because writers mutate the
+ * store as they go, so iterating over a changing graph would be unsafe.
+ */
+function collectBindings(
+  plan: PlanNode,
+  store: GraphStore,
+  guard: Guard,
+  ctx: EvalContext,
+): Binding[] {
+  // Descend past the result-stage operators to the binding subtree.
+  let bindingRoot = plan;
+  while (!isBindingOp(bindingRoot)) {
+    if ('child' in bindingRoot && bindingRoot.child) bindingRoot = bindingRoot.child;
+    else break;
+  }
+  // A WHERE Filter belongs to the binding subtree; result ops were skipped above.
+  return [...bindings(bindingRoot, store, guard, ctx)];
+}
+
+/**
+ * Produce match bindings for a read pattern (no projection). Used by the write
+ * executor to drive per-row writes. Returns concrete Binding rows (eagerly
+ * materialized — writers mutate the store as they go, so lazy iteration over a
+ * changing graph is unsafe).
+ */
+export function matchBindings(
+  patterns: ReadQuery['patterns'],
+  where: ReadQuery['where'],
+  store: GraphStore,
+  opts: ExecOptions,
+): Binding[] {
+  const pseudo: ReadQuery = {
+    patterns,
+    where,
+    distinct: false,
+    items: [],
+    orderBy: [],
+  };
+  const plan = planQuery(pseudo, store);
+  const guard = new Guard(opts);
+  const ctx: EvalContext = { params: opts.params, source: opts.source };
+  // Reuse the same binding-subtree walker runRead uses; collect eagerly.
+  return collectBindings(plan, store, guard, ctx);
+}
+
 export function runRead(
   plan: PlanNode,
   query: ReadQuery,
@@ -89,157 +292,7 @@ export function runRead(
   const guard = new Guard(opts);
   const ctx: EvalContext = { params: opts.params, source: opts.source };
 
-  // Descend past the result-stage operators to the binding subtree.
-  let bindingRoot = plan;
-  while (!isBindingOp(bindingRoot)) {
-    if ('child' in bindingRoot && bindingRoot.child) bindingRoot = bindingRoot.child;
-    else break;
-  }
-  // A WHERE Filter belongs to the binding subtree; result ops were skipped above.
-
-  function* edgesFor(
-    id: number,
-    types: string[],
-    direction: 'out' | 'in' | 'both',
-  ): IterableIterator<{ edge: EdgeRecord; other: number }> {
-    const typeList: (string | undefined)[] = types.length === 0 ? [undefined] : types;
-    const seen = direction === 'both' ? new Set<number>() : undefined;
-    for (const t of typeList) {
-      if (direction !== 'in')
-        for (const e of store.outEdges(id, t)) {
-          if (seen) {
-            if (seen.has(e.id)) continue;
-            seen.add(e.id);
-          }
-          yield { edge: e, other: e.to };
-        }
-      if (direction !== 'out')
-        for (const e of store.inEdges(id, t)) {
-          if (seen) {
-            if (seen.has(e.id)) continue;
-            seen.add(e.id);
-          }
-          yield { edge: e, other: e.from };
-        }
-    }
-  }
-
-  function extend(b: Binding, key: string, value: NodeRecord | EdgeRecord): Binding {
-    const next = new Map(b);
-    next.set(key, value);
-    return next;
-  }
-
-  function* bindings(node: PlanNode): Generator<Binding> {
-    switch (node.op) {
-      case 'AllNodesScan': {
-        for (const n of store.nodes.values()) {
-          guard.bump();
-          yield new Map([[node.variable, n]]);
-        }
-        return;
-      }
-      case 'LabelScan': {
-        for (const n of store.nodesByLabel(node.label)) {
-          guard.bump();
-          yield new Map([[node.variable, n]]);
-        }
-        return;
-      }
-      case 'IndexSeek': {
-        const v = evalExpr(node.valueAst, new Map(), ctx);
-        if (v === null || Array.isArray(v) || (typeof v === 'object' && !(v instanceof Date)))
-          return;
-        for (const id of store.indexes.lookupExact(node.label, node.property, v) ?? []) {
-          guard.bump();
-          const n = store.getNode(id);
-          if (n) yield new Map([[node.variable, n]]);
-        }
-        return;
-      }
-      case 'FromBound':
-        throw new AqlError(
-          'RUNTIME_ERROR',
-          'unspliced FromBound reached the executor',
-          ORIGIN,
-          opts.source,
-        );
-      case 'Filter': {
-        for (const b of bindings(node.child)) {
-          if (evalExpr(node.exprAst, b, ctx) === true) yield b;
-        }
-        return;
-      }
-      case 'Expand': {
-        for (const b of bindings(node.child)) {
-          const from = b.get(node.from) as NodeRecord;
-          for (const { edge, other } of edgesFor(from.id, node.types, node.direction)) {
-            guard.bump();
-            const target = store.getNode(other)!;
-            if (!hasAllLabels(target, node.toLabels)) continue;
-            const boundTo = b.get(node.to);
-            if (boundTo !== undefined && (boundTo as NodeRecord).id !== target.id) continue;
-            if (node.edgeVariable !== undefined) {
-              const boundEdge = b.get(node.edgeVariable);
-              if (boundEdge !== undefined && (boundEdge as EdgeRecord).id !== edge.id) continue;
-            }
-            let next = boundTo === undefined ? extend(b, node.to, target) : b;
-            if (node.edgeVariable !== undefined && b.get(node.edgeVariable) === undefined)
-              next = extend(next, node.edgeVariable, edge);
-            yield next;
-          }
-        }
-        return;
-      }
-      case 'VarLengthExpand': {
-        for (const b of bindings(node.child)) {
-          const from = b.get(node.from) as NodeRecord;
-          // One row per distinct edge-unique path with length in [min, max].
-          const stack: { id: number; depth: number; used: Set<number> }[] = [
-            { id: from.id, depth: 0, used: new Set() },
-          ];
-          while (stack.length > 0) {
-            const cur = stack.pop()!;
-            if (cur.depth >= node.min && cur.depth > 0) {
-              guard.bump();
-              const target = store.getNode(cur.id)!;
-              if (hasAllLabels(target, node.toLabels)) {
-                const boundTo = b.get(node.to);
-                if (boundTo === undefined) yield extend(b, node.to, target);
-                else if ((boundTo as NodeRecord).id === target.id) yield b;
-              }
-            }
-            if (cur.depth >= node.max) continue;
-            for (const { edge, other } of edgesFor(cur.id, node.types, node.direction)) {
-              guard.bump();
-              if (cur.used.has(edge.id)) continue;
-              stack.push({ id: other, depth: cur.depth + 1, used: new Set(cur.used).add(edge.id) });
-            }
-          }
-        }
-        return;
-      }
-      case 'CartesianProduct': {
-        const rights: Binding[] = [...bindings(node.right)];
-        for (const l of bindings(node.left)) {
-          for (const r of rights) {
-            guard.bump();
-            const merged = new Map(l);
-            for (const [k, v] of r) merged.set(k, v);
-            yield merged;
-          }
-        }
-        return;
-      }
-      default:
-        throw new AqlError(
-          'RUNTIME_ERROR',
-          `unexpected plan op ${node.op} in binding subtree`,
-          ORIGIN,
-          opts.source,
-        );
-    }
-  }
+  const allBindings = collectBindings(plan, store, guard, ctx);
 
   // ---- result stage ----
   const columns = query.items.map((it) => it.alias ?? renderExpr(it.expr));
@@ -263,7 +316,7 @@ export function runRead(
     const window = canShortCircuit && limit !== undefined ? (skip ?? 0) + limit : undefined;
     const skipN = skip ?? 0;
     let collected = 0;
-    for (const b of bindings(bindingRoot)) {
+    for (const b of allBindings) {
       if (window !== undefined && collected >= window) break;
       const row = { values: query.items.map((it) => evalExpr(it.expr, b, ctx)), binding: b };
       if (canShortCircuit) {
@@ -297,7 +350,7 @@ export function runRead(
           it.pos,
           opts.source,
         );
-    for (const b of bindings(bindingRoot)) {
+    for (const b of allBindings) {
       const keyValues = new Map<number, RuntimeValue>();
       for (const [i, it] of query.items.entries())
         if (!isAggregateItem(it.expr)) keyValues.set(i, evalExpr(it.expr, b, ctx));
