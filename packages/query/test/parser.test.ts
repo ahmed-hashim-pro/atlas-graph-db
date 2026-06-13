@@ -79,4 +79,10 @@ describe('parseQuery — semantic validation', () => {
   it('rejects writes (M4b scope) as parse errors', () => {
     expect(err('CREATE (n:X) RETURN n').code).toBe('PARSE_ERROR');
   });
+
+  it('rejects duplicate inline property keys in a node pattern', () => {
+    const e = err("MATCH (n:Row {p1: 'a', p1: 'zzz'}) RETURN n");
+    expect(e.code).toBe('SEMANTIC_ERROR');
+    expect(e.message).toContain('duplicate property "p1"');
+  });
 });
