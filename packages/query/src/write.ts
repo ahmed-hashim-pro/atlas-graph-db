@@ -18,6 +18,7 @@ export interface WriteResult {
 
 interface WriteCtx {
   tx: TxBuilder;
+  store: GraphStore;
   eval: EvalContext;
   stats: { created: number; deleted: number; propsSet: number };
 }
@@ -139,6 +140,69 @@ function applySet(items: SetItem[], ctx: WriteCtx, binding: Binding): void {
   }
 }
 
+/**
+ * Try to match the whole MERGE pattern against the committed store.
+ *
+ * Caveat: `matchBindings` reads the live store, which does NOT yet include nodes
+ * created earlier in the same uncommitted transaction. Within a single MERGE per
+ * row this is correct (match-or-create is defined over current graph state).
+ * Chained MERGEs in one statement that depend on each other's just-created nodes
+ * are a known v1 limitation (noted in the AQL reference, Task 9).
+ *
+ * Returns a binding extended with the matched elements, or null if no complete
+ * match of the whole pattern exists.
+ */
+function mergeMatch(pat: PathPattern, ctx: WriteCtx, binding: Binding): Binding | null {
+  const execOpts: ExecOptions = {
+    params: ctx.eval.params,
+    source: ctx.eval.source,
+    timeoutMs: 30_000,
+    maxRows: 1_000_000,
+  };
+  // Find candidate matches of the whole pattern against committed state.
+  const candidates = matchBindings([pat], undefined, ctx.store, execOpts);
+  for (const cand of candidates) {
+    let ok = true;
+    // Bound variables (from a leading MATCH) become hard constraints: filter
+    // matches whose corresponding element id equals the bound id.
+    for (const [name, rec] of binding) {
+      const got = cand.get(name);
+      if (got && got.id !== rec.id) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      // Merge the candidate's new bindings into a copy of the row binding.
+      const merged = new Map(binding);
+      for (const [k, v] of cand) merged.set(k, v);
+      return merged;
+    }
+  }
+  return null;
+}
+
+/**
+ * MERGE one binding row: match the whole pattern, or create it entirely.
+ * `ON CREATE SET` applies only on the create path; `ON MATCH SET` only when
+ * matched. A create that violates a unique constraint surfaces
+ * CONSTRAINT_VIOLATION at commit — MERGE does not pre-check.
+ */
+function runMerge(
+  clause: Extract<WriteClause, { clause: 'merge' }>,
+  ctx: WriteCtx,
+  binding: Binding,
+): void {
+  const matched = mergeMatch(clause.pattern, ctx, binding);
+  if (matched !== null) {
+    for (const [k, v] of matched) binding.set(k, v);
+    applySet(clause.onMatch, ctx, binding);
+  } else {
+    createPattern(clause.pattern, ctx, binding);
+    applySet(clause.onCreate, ctx, binding);
+  }
+}
+
 function runClause(clause: WriteClause, ctx: WriteCtx, binding: Binding): void {
   switch (clause.clause) {
     case 'create':
@@ -181,7 +245,8 @@ function runClause(clause: WriteClause, ctx: WriteCtx, binding: Binding): void {
       }
       return;
     case 'merge':
-      throw new AqlError('RUNTIME_ERROR', 'MERGE handled in Task 4', clause.pos, ctx.eval.source);
+      runMerge(clause, ctx, binding);
+      return;
   }
 }
 
@@ -199,6 +264,7 @@ export function runWrite(
   };
   const ctx: WriteCtx = {
     tx,
+    store,
     eval: { params: opts.params, source: opts.source },
     stats: { created: 0, deleted: 0, propsSet: 0 },
   };
