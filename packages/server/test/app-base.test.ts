@@ -37,6 +37,17 @@ describe('app base', () => {
     expect(r.json()).toHaveProperty('status', 404);
   });
 
+  it('malformed JSON bodies are 400, not 500', async () => {
+    const r = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      headers: { 'content-type': 'application/json' },
+      payload: '{ not valid json ',
+    });
+    expect(r.statusCode).toBe(400);
+    expect(r.json()).toMatchObject({ status: 400 });
+  });
+
   it('admin bootstrap seeds an admin when configured', async () => {
     const dir2 = await mkdtemp(join(tmpdir(), 'atlas-app2-'));
     const app2 = await buildServer(

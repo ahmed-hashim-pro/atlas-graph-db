@@ -21,6 +21,7 @@ export async function generateToken(): Promise<{ token: string; hash: string }> 
   return { token, hash: await hash(token, ARGON_OPTS) };
 }
 
+/** M5b seam: standalone token hashing (the M5a token route uses generateToken). */
 export function hashToken(token: string): Promise<string> {
   return hash(token, ARGON_OPTS);
 }
