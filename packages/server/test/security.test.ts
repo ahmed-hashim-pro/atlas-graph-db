@@ -54,4 +54,19 @@ describe('rate limiting', () => {
     app = await make({ ATLAS_RATE_LIMIT: '1', ATLAS_RATE_WINDOW_MS: '60000' });
     for (let i = 0; i < 5; i++) expect((await app.inject({ method: 'GET', url: '/healthz' })).statusCode).toBe(200);
   });
+
+  it('resets the counter after the window elapses', async () => {
+    // Tiny window so the fixed-window reset branch (nowMs >= entry.resetAt) is exercised.
+    app = await make({ ATLAS_RATE_LIMIT: '1', ATLAS_RATE_WINDOW_MS: '20' });
+    await app.inject({ method: 'POST', url: '/api/auth/register', payload: { username: 'grace', password: 'secret12' } });
+    const l = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'grace', password: 'secret12' } });
+    const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
+    // First request in the window: allowed.
+    expect((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode).toBe(200);
+    // Second request, still inside the window: over budget -> 429.
+    expect((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode).toBe(429);
+    // Wait past the window so the next request opens a fresh bucket.
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect((await app.inject({ method: 'GET', url: '/api/db', headers: { cookie } })).statusCode).toBe(200);
+  });
 });
