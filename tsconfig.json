@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/core" },
     { "path": "packages/datasets" },
-    { "path": "packages/query" }
+    { "path": "packages/query" },
+    { "path": "packages/protocol" }
   ]
 }
