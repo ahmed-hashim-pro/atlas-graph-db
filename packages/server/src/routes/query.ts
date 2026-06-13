@@ -33,6 +33,8 @@ export async function registerQueryRoutes(app: FastifyInstance, ctx: AppContext)
       timeoutMs: ctx.config.queryTimeoutMs,
       maxRows: ctx.config.maxRows,
     });
+    ctx.metrics.queriesTotal.inc();
+    ctx.metrics.queryLatencyMs.observe(result.stats.elapsedMs);
     return result;
   });
 
