@@ -135,3 +135,16 @@ export interface ImportResult {
   idMap: Record<string, number>; // tempId → assigned engine id
   error?: { message: string; at: { kind: 'node' | 'edge'; index: number } };
 }
+
+export const SubscribeFilter = z.object({
+  labels: z.array(z.string()).optional(),
+  types: z.array(z.string()).optional(),
+});
+export type SubscribeFilter = z.infer<typeof SubscribeFilter>;
+
+/** Server→client WS frames. */
+export type WsFrame =
+  | { type: 'ready' }
+  | { type: 'batch'; txId: number; ops: unknown[] }
+  | { type: 'resync_required' }
+  | { type: 'error'; code: string; message: string };
