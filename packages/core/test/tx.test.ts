@@ -1,4 +1,8 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { openDatabase } from '../src/database.js';
 import { AtlasError } from '../src/errors.js';
 import { IdAllocator } from '../src/id-allocator.js';
 import { GraphStore } from '../src/store.js';
@@ -34,15 +38,34 @@ describe('TxBuilder', () => {
     expect(() => tx.createEdge('KNOWS', 1, 2)).toThrowError(AtlasError);
   });
 
-  it('deleteNode without detach throws VALIDATION while edges remain', () => {
+  it('deleteNode without detach throws DETACH_REQUIRED while edges remain', () => {
     const { store, ids } = setup();
     const tx = new TxBuilder(store, ids);
     try {
       tx.deleteNode(1);
       expect.unreachable();
     } catch (e) {
-      expect((e as AtlasError).code).toBe('VALIDATION');
+      expect((e as AtlasError).code).toBe('DETACH_REQUIRED');
     }
+  });
+
+  it('deleting a node with incident edges throws DETACH_REQUIRED (a distinct code)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detach-'));
+    const db = await openDatabase(dir);
+    let a = 0;
+    await db.transact((tx) => {
+      a = tx.createNode(['P'], {});
+      const b = tx.createNode(['P'], {});
+      tx.createEdge('R', a, b);
+    });
+    await expect(db.transact((tx) => tx.deleteNode(a))).rejects.toMatchObject({
+      code: 'DETACH_REQUIRED',
+    });
+    expect(() => {
+      throw new AtlasError('DETACH_REQUIRED', 'x');
+    }).toThrow(AtlasError);
+    await db.close();
+    await rm(dir, { recursive: true, force: true });
   });
 
   it('deleteNode with detach expands deleteEdge ops for committed and tx-created edges', () => {

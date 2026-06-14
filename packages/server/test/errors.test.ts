@@ -21,6 +21,13 @@ describe('toProblem', () => {
     expect(toProblem(new AtlasError('TIMEOUT', 'x')).status).toBe(504);
   });
 
+  it('maps DETACH_REQUIRED to 409 Conflict', () => {
+    const { status, body } = toProblem(new AtlasError('DETACH_REQUIRED', 'node 1 has 2 edge(s)'));
+    expect(status).toBe(409);
+    expect(body.code).toBe('DETACH_REQUIRED');
+    expect(body.title).toBe('Conflict');
+  });
+
   it('maps unknown errors to 500 without leaking the message as title', () => {
     const { status, body } = toProblem(new Error('boom internal detail'));
     expect(status).toBe(500);

@@ -27,6 +27,8 @@ query errors).
 ## Data CRUD
 - `GET|POST /api/db/:name/nodes[/:id]`, `PATCH|DELETE …/nodes/:id` (`?detach=true`)
 - `GET|POST /api/db/:name/edges[/:id]`, `PATCH|DELETE …/edges/:id`
+- `DELETE …/nodes/:id` on a node with incident edges → 409 `application/problem+json`
+  with `code: "DETACH_REQUIRED"`. Pass `?detach=true` to remove the node and its edges.
 
 ## Import / export / seed
 - `POST /api/db/:name/import` — JSON `{nodes:[{tempId,labels,properties}],edges:[{from,to,type,properties}],atomic?}`
@@ -42,8 +44,13 @@ query errors).
 - `GET /api/tokens` → `[{tokenId,name}]` · `DELETE /api/tokens/:id`
 
 ## Live updates
-- `WS /ws/db/:name?token=<t>&labels=A,B&types=X,Y` — frames: `{type:'ready'}`,
-  `{type:'batch',txId,ops}`, `{type:'resync_required'}` (then close).
+- `WS /ws/db/:name?token=<t>&labels=A,B&types=X,Y` — server→client frames:
+  `{type:'ready'}` (subscription active), `{type:'batch',txId,ops}` (a committed
+  transaction matching the label/type filter), `{type:'resync_required'}` (the
+  change feed is stale; the client should reload — the socket then closes), and
+  `{type:'error',code,message}` (e.g. `code:"FORBIDDEN"` when the caller may not
+  read the database; the socket then closes). Authentication failures abort the
+  upgrade before `open` (the client never sees a frame).
 
 ## Ops
 - `GET /healthz` → `{status:'ok'}` · `GET /metrics` → Prometheus text

@@ -72,4 +72,32 @@ describe('/metrics endpoint', () => {
     const r = await app.inject({ method: 'GET', url: '/metrics' });
     expect(r.body).toMatch(/atlas_queries_total [1-9]/);
   });
+
+  it('a failed query increments queryErrorsTotal and queriesTotal, not just successes', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const l = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
+    await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });
+
+    // An invalid query (empty RETURN → parse error) 400s and must still be
+    // metered (the route counts parse failures before re-throwing).
+    const bad = await app.inject({
+      method: 'POST',
+      url: '/api/db/kb/query',
+      headers: { cookie },
+      payload: { query: 'MATCH (n) RETURN', params: {} },
+    });
+    expect(bad.statusCode).toBe(400);
+    const metrics = (await app.inject({ method: 'GET', url: '/metrics' })).body;
+    expect(metrics).toMatch(/atlas_query_errors_total [1-9]/);
+    expect(metrics).toMatch(/atlas_queries_total [1-9]/);
+  });
 });

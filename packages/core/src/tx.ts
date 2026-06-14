@@ -76,7 +76,7 @@ export class TxBuilder {
     if (incident.size > 0) {
       if (!opts.detach)
         throw new AtlasError(
-          'VALIDATION',
+          'DETACH_REQUIRED',
           `node ${id} has ${incident.size} edge(s); pass { detach: true }`,
         );
       for (const edgeId of incident) {

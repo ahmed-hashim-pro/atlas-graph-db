@@ -1,5 +1,5 @@
 import { dbNameSchema, EdgeCreateReq, NodeCreateReq, NodePatchReq } from '@atlas/protocol';
-import { AtlasError, type AtlasDatabase } from '@atlas/core';
+import { type AtlasDatabase } from '@atlas/core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppContext } from '../app.js';
 import { requireAuth, requireCapability } from '../auth.js';
@@ -57,14 +57,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     const id = parseId((req.params as { id: string }).id);
     if (!db.getNode(id)) throw new HttpError(404, 'NOT_FOUND', 'node not found');
     const detach = (req.query as { detach?: string }).detach === 'true';
-    try {
-      await db.transact((tx) => tx.deleteNode(id, { detach }));
-    } catch (err) {
-      if (err instanceof AtlasError && err.code === 'VALIDATION' && err.message.includes('edge')) {
-        throw new HttpError(409, 'CONFLICT', err.message);
-      }
-      throw err;
-    }
+    await db.transact((tx) => tx.deleteNode(id, { detach }));
     void reply.status(204);
   });
 

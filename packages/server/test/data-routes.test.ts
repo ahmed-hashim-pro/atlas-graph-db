@@ -122,15 +122,13 @@ describe('node CRUD', () => {
       headers: { cookie: owner },
       payload: { type: 'R', from: a, to: b },
     });
-    expect(
-      (
-        await app.inject({
-          method: 'DELETE',
-          url: `/api/db/kb/nodes/${a}`,
-          headers: { cookie: owner },
-        })
-      ).statusCode,
-    ).toBe(409);
+    const conflict = await app.inject({
+      method: 'DELETE',
+      url: `/api/db/kb/nodes/${a}`,
+      headers: { cookie: owner },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json().code).toBe('DETACH_REQUIRED');
     expect(
       (
         await app.inject({
