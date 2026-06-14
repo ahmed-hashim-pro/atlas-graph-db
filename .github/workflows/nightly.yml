@@ -20,5 +20,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: bench smoke (SCALE=0.05, validates the harness)
+        run: |
+          SCALE=0.05 node --expose-gc --import tsx packages/core/bench/storage.bench.ts
+          SCALE=0.05 node --expose-gc --import tsx packages/core/bench/algo.bench.ts
       - run: SCALE=${{ github.event.inputs.scale || '0.25' }} node --expose-gc --import tsx packages/core/bench/storage.bench.ts
       - run: SCALE=${{ github.event.inputs.scale || '0.25' }} node --expose-gc --import tsx packages/core/bench/algo.bench.ts
