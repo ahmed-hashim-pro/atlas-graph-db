@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { drawGraph } from './renderer';
 import { makeColorOf } from './theme-colors';
 import { IDENTITY } from './viewport';
@@ -88,9 +88,18 @@ describe('drawGraph', () => {
   });
 
   it('draws a selection highlight (accent stroke) around the selected node', () => {
-    const { ctx, sets, calls } = stubCtx();
+    const { ctx, calls } = stubCtx();
+    // Record every strokeStyle write so the assertion does not depend on draw
+    // order (a pinned node drawn after the selected one would otherwise
+    // overwrite the final strokeStyle with textMuted).
+    const strokes: string[] = [];
+    const orig = Object.getOwnPropertyDescriptor(ctx, 'strokeStyle');
+    Object.defineProperty(ctx, 'strokeStyle', {
+      set: (v: string) => strokes.push(v),
+      get: () => orig?.value as string,
+    });
     drawGraph(ctx, scene({ selection: { kind: 'node', id: 'a' } }));
-    expect(sets['strokeStyle']).toBe(theme.accent);
+    expect(strokes).toContain(theme.accent);
     expect(calls.filter((c) => c === 'stroke').length).toBeGreaterThan(0);
   });
 
