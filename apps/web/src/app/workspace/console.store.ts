@@ -21,7 +21,18 @@ interface ClientErrorLike {
   problem?: { code?: string; detail?: string; line?: number; column?: number; snippet?: string };
 }
 
-@Injectable({ providedIn: 'root' })
+/**
+ * Provided at the **Workspace component** scope (not `providedIn: 'root'`).
+ *
+ * The console's "project to canvas" must reach the live per-database canvas. The
+ * workspace binds `WORKSPACE_GRAPH_STORE` → `GraphStoreWorkspaceAdapter` (over the
+ * real `GraphStore`) in its `providers`. If this store were a root singleton, its
+ * `inject(WORKSPACE_GRAPH_STORE)` would resolve at the ROOT injector — the dead
+ * `InMemoryWorkspaceGraphStore` default from `app.config.ts` — and projecting would
+ * silently write to a fake. Scoping it to the workspace makes it resolve the real
+ * adapter, so `projectToCanvas()` actually replaces the displayed graph.
+ */
+@Injectable()
 export class ConsoleStore {
   private readonly api = inject(AtlasApi);
   // Optional so the console store works in unit tests / contexts without a

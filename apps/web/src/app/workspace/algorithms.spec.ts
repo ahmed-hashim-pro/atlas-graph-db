@@ -35,7 +35,7 @@ describe('buildAlgorithmCall', () => {
       iterations: 20,
     });
     expect(built.query).toBe(
-      'CALL algo.pagerank({damping: $damping, iterations: $iterations}) YIELD node, score RETURN node, score',
+      'CALL algo.pagerank({damping: $damping, iterations: $iterations}) YIELD node, score',
     );
     expect(built.params).toEqual({ damping: 0.85, iterations: 20 });
   });

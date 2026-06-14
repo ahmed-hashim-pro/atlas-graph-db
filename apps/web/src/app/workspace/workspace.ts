@@ -7,6 +7,7 @@ import { OnDestroy } from '@angular/core';
 import { AtlasApi } from '../core/atlas-api';
 import { AlgorithmsView } from './algorithms-view';
 import { Console } from './console';
+import { ConsoleStore } from './console.store';
 import { GraphCanvas } from './graph-canvas';
 import { GraphStore } from './graph.store';
 import { GraphStoreWorkspaceAdapter } from './graph-store.adapter';
@@ -33,6 +34,12 @@ const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
     // "paint onto canvas" target this workspace's canvas store (not the
     // app-wide in-memory default), so both reach the live renderer.
     { provide: WORKSPACE_GRAPH_STORE, useClass: GraphStoreWorkspaceAdapter },
+    // Scope the console store here too: as a root singleton its
+    // WORKSPACE_GRAPH_STORE would resolve to the dead in-memory default, so
+    // "project to canvas" never reached the real GraphStore. The algorithms
+    // view injects WORKSPACE_GRAPH_STORE directly (component element injector),
+    // so it already resolves the adapter below.
+    ConsoleStore,
   ],
 })
 export class Workspace implements AfterViewInit, OnDestroy {
