@@ -30,6 +30,7 @@
     "@angular/platform-browser": "^20.3.0",
     "@angular/router": "^20.3.0",
     "@atlas/client": "workspace:*",
+    "@atlas/core": "workspace:*",
     "@atlas/protocol": "workspace:*",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

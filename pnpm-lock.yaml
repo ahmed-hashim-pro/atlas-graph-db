@@ -56,6 +56,9 @@ importers:
       '@atlas/client':
         specifier: workspace:*
         version: link:../../packages/client
+      '@atlas/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@atlas/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
