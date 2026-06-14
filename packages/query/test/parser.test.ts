@@ -107,7 +107,9 @@ describe('parseQuery — semantic validation', () => {
   });
 
   it('an unknown function is still rejected (lower allowed, frobnicate not)', () => {
-    expect(() => parseQuery('MATCH (n) RETURN frobnicate(n.name)')).toThrowError(/unknown function/);
+    expect(() => parseQuery('MATCH (n) RETURN frobnicate(n.name)')).toThrowError(
+      /unknown function/,
+    );
     expect(() => parseQuery('MATCH (n) RETURN lower(n.name)')).not.toThrow();
   });
 });

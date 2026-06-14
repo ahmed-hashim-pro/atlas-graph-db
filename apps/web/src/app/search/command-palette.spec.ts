@@ -76,7 +76,7 @@ describe('CommandPalette', () => {
     const focusables = root.querySelectorAll<HTMLElement>('input, [tabindex]:not([tabindex="-1"])');
     // The search input is focusable; trapTab keeps focus inside rather than escaping.
     const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
-    const handled = fixture.componentInstance.onKey(ev);
+    fixture.componentInstance.onKey(ev);
     // onKey returns void; assert it prevented default when wrapping at the edge.
     expect(focusables.length).toBeGreaterThan(0);
     expect(ev.defaultPrevented || focusables.length === 1).toBe(true);

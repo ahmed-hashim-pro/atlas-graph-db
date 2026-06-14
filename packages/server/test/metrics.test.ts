@@ -85,7 +85,12 @@ describe('/metrics endpoint', () => {
       payload: { username: 'ada', password: 'secret12' },
     });
     const cookie = `atlas_session=${l.cookies.find((c) => c.name === 'atlas_session')!.value}`;
-    await app.inject({ method: 'POST', url: '/api/db', headers: { cookie }, payload: { name: 'kb' } });
+    await app.inject({
+      method: 'POST',
+      url: '/api/db',
+      headers: { cookie },
+      payload: { name: 'kb' },
+    });
 
     // An invalid query (empty RETURN → parse error) 400s and must still be
     // metered (the route counts parse failures before re-throwing).

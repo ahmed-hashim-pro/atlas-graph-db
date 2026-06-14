@@ -96,9 +96,7 @@ export class CommandPalette {
     const root = this.searchBox()?.nativeElement.closest('.palette') as HTMLElement | null;
     if (!root) return;
     const items = Array.from(
-      root.querySelectorAll<HTMLElement>(
-        'input, button, [href], [tabindex]:not([tabindex="-1"])',
-      ),
+      root.querySelectorAll<HTMLElement>('input, button, [href], [tabindex]:not([tabindex="-1"])'),
     ).filter((el) => !el.hasAttribute('disabled'));
     if (items.length === 0) return;
     const first = items[0]!;

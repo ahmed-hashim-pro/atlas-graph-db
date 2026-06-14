@@ -93,9 +93,9 @@ describe('CALL YIELD validation uses the static algorithm schema', () => {
       const b = tx.createNode(['V'], {});
       tx.createEdge('R', a, b); // acyclic → no cycles
     });
-    await expect(
-      runCall(call('CALL algo.cycles() YIELD cyc'), db2, {}),
-    ).rejects.toMatchObject({ code: 'SEMANTIC_ERROR' });
+    await expect(runCall(call('CALL algo.cycles() YIELD cyc'), db2, {})).rejects.toMatchObject({
+      code: 'SEMANTIC_ERROR',
+    });
     // A valid YIELD on the same empty result returns the column with no rows.
     const ok = await runCall(call('CALL algo.cycles() YIELD cycle'), db2, {});
     expect(ok.columns).toEqual(['cycle']);

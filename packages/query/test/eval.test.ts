@@ -57,7 +57,9 @@ describe('evalExpr', () => {
 
   it('lower() lowercases a string argument', () => {
     // Build via the parser so we exercise the real call-Expr shape.
-    const e = parseExpression(new TokenStream(lex("lower('AdA LoVeLaCe')"), "lower('AdA LoVeLaCe')"));
+    const e = parseExpression(
+      new TokenStream(lex("lower('AdA LoVeLaCe')"), "lower('AdA LoVeLaCe')"),
+    );
     expect(evalExpr(e, new Map(), { params: {}, source: '' })).toBe('ada lovelace');
   });
 
