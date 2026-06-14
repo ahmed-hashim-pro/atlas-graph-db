@@ -2,6 +2,32 @@
   <header class="ws-topbar">
     <a routerLink="/databases" class="ws-back">← Databases</a>
     <h1 class="ws-title">{{ name }}</h1>
+    <nav class="ws-dock-tabs" aria-label="Workspace panels">
+      <button
+        type="button"
+        [class.active]="dock() === 'console'"
+        [attr.aria-pressed]="dock() === 'console'"
+        (click)="toggleDock('console')"
+      >
+        Console
+      </button>
+      <button
+        type="button"
+        [class.active]="dock() === 'schema'"
+        [attr.aria-pressed]="dock() === 'schema'"
+        (click)="toggleDock('schema')"
+      >
+        Schema
+      </button>
+      <button
+        type="button"
+        [class.active]="dock() === 'algorithms'"
+        [attr.aria-pressed]="dock() === 'algorithms'"
+        (click)="toggleDock('algorithms')"
+      >
+        Algorithms
+      </button>
+    </nav>
     <span class="ws-stats">{{ store.shownCount() }} / {{ store.totalNodeCount() }} nodes</span>
   </header>
   <div class="ws-body">
@@ -9,4 +35,19 @@
     <app-graph-canvas class="ws-canvas" (expandNode)="onExpand($event)" />
     <app-inspector class="ws-inspector" (expand)="onExpand($event)" />
   </div>
+  @if (dock(); as panel) {
+    <div class="ws-dock" [attr.data-panel]="panel">
+      @switch (panel) {
+        @case ('console') {
+          <app-console [database]="name" />
+        }
+        @case ('schema') {
+          <app-schema-view />
+        }
+        @case ('algorithms') {
+          <app-algorithms-view />
+        }
+      }
+    </div>
+  }
 </div>
