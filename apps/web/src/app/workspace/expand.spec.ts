@@ -74,7 +74,11 @@ describe('parseGraphRows', () => {
   });
 
   it('ignores non-graph scalar rows without throwing', () => {
-    const res: QueryResponse = { columns: ['c'], rows: [[5]], stats: { rowsExamined: 1, elapsedMs: 0 } };
+    const res: QueryResponse = {
+      columns: ['c'],
+      rows: [[5]],
+      stats: { rowsExamined: 1, elapsedMs: 0 },
+    };
     expect(parseGraphRows(res)).toEqual({ nodes: [], edges: [] });
   });
 

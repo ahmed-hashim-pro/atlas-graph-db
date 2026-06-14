@@ -37,7 +37,10 @@ describe('GraphStore', () => {
 
   it('addGraph merges nodes/edges and recomputes visible scene + counts', () => {
     const store = make();
-    store.addGraph({ nodes: [node('1'), node('2'), node('3', 'Doc')], edges: [edge('e', '1', '2')] });
+    store.addGraph({
+      nodes: [node('1'), node('2'), node('3', 'Doc')],
+      edges: [edge('e', '1', '2')],
+    });
     expect(store.totalNodeCount()).toBe(3);
     expect(store.visibleNodes()).toHaveLength(3);
     expect(store.visibleEdges()).toHaveLength(1);
@@ -82,7 +85,10 @@ describe('GraphStore', () => {
 
   it('connectionsOf returns incident edges with the neighbor id', () => {
     const store = make();
-    store.addGraph({ nodes: [node('1'), node('2'), node('3')], edges: [edge('e1', '1', '2'), edge('e2', '3', '1')] });
+    store.addGraph({
+      nodes: [node('1'), node('2'), node('3')],
+      edges: [edge('e1', '1', '2'), edge('e2', '3', '1')],
+    });
     const conns = store.connectionsOf('1');
     expect(conns.map((c) => c.neighborId).sort()).toEqual(['2', '3']);
     expect(conns.find((c) => c.neighborId === '2')?.direction).toBe('out');

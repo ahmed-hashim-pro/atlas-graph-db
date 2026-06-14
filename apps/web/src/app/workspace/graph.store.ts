@@ -42,8 +42,16 @@ export class GraphStore {
 
   /** Visibility derived from the legend entries (label/type hidden when its entry is not visible). */
   private readonly visibility = computed(() => ({
-    hiddenLabels: new Set(this._labels().filter((l) => !l.visible).map((l) => l.label)),
-    hiddenTypes: new Set(this._edgeTypes().filter((t) => !t.visible).map((t) => t.type)),
+    hiddenLabels: new Set(
+      this._labels()
+        .filter((l) => !l.visible)
+        .map((l) => l.label),
+    ),
+    hiddenTypes: new Set(
+      this._edgeTypes()
+        .filter((t) => !t.visible)
+        .map((t) => t.type),
+    ),
   }));
 
   /** The full filtered graph (pre-cap) — used for counts. */
@@ -114,15 +122,20 @@ export class GraphStore {
       nodes: d.nodes.filter((n) => n.id !== id),
       edges: d.edges.filter((e) => e.from !== id && e.to !== id),
     }));
-    if (this._selection()?.kind === 'node' && this._selection()?.id === id) this._selection.set(null);
+    if (this._selection()?.kind === 'node' && this._selection()?.id === id)
+      this._selection.set(null);
     this.refreshLegendFromData();
   }
 
   toggleLabel(label: string): void {
-    this._labels.update((ls) => ls.map((l) => (l.label === label ? { ...l, visible: !l.visible } : l)));
+    this._labels.update((ls) =>
+      ls.map((l) => (l.label === label ? { ...l, visible: !l.visible } : l)),
+    );
   }
   toggleEdgeType(type: string): void {
-    this._edgeTypes.update((ts) => ts.map((t) => (t.type === type ? { ...t, visible: !t.visible } : t)));
+    this._edgeTypes.update((ts) =>
+      ts.map((t) => (t.type === type ? { ...t, visible: !t.visible } : t)),
+    );
   }
 
   setRenderCap(cap: number): void {
@@ -146,17 +159,26 @@ export class GraphStore {
   private refreshLegendFromData(): void {
     const data = this._data();
     const labelCounts = new Map<string, number>();
-    for (const n of data.nodes) for (const l of n.labels) labelCounts.set(l, (labelCounts.get(l) ?? 0) + 1);
+    for (const n of data.nodes)
+      for (const l of n.labels) labelCounts.set(l, (labelCounts.get(l) ?? 0) + 1);
     const prevLabels = new Map(this._labels().map((l) => [l.label, l]));
     this._labels.set(
-      [...labelCounts].map(([label, count]) => ({ label, count, visible: prevLabels.get(label)?.visible ?? true })),
+      [...labelCounts].map(([label, count]) => ({
+        label,
+        count,
+        visible: prevLabels.get(label)?.visible ?? true,
+      })),
     );
 
     const typeCounts = new Map<string, number>();
     for (const e of data.edges) typeCounts.set(e.type, (typeCounts.get(e.type) ?? 0) + 1);
     const prevTypes = new Map(this._edgeTypes().map((t) => [t.type, t]));
     this._edgeTypes.set(
-      [...typeCounts].map(([type, count]) => ({ type, count, visible: prevTypes.get(type)?.visible ?? true })),
+      [...typeCounts].map(([type, count]) => ({
+        type,
+        count,
+        visible: prevTypes.get(type)?.visible ?? true,
+      })),
     );
   }
 }

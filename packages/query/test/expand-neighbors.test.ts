@@ -50,9 +50,7 @@ describe('expand-neighbors against the real engine', () => {
     expect(res.rows.length).toBe(2);
 
     const data = parseGraphRows(res);
-    expect(data.nodes.map((n) => n.id).sort()).toEqual(
-      [centerId, bobId, cyId].map(String).sort(),
-    );
+    expect(data.nodes.map((n) => n.id).sort()).toEqual([centerId, bobId, cyId].map(String).sort());
     expect(data.edges.length).toBe(2);
     expect(data.nodes.find((n) => n.id === String(bobId))?.props['name']).toBe('Bob');
     for (const e of data.edges) {
