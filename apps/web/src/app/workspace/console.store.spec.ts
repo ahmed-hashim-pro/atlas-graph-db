@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AtlasApi } from '../core/atlas-api';
 import { ConsoleStore } from './console.store';
 import type { QueryResponse } from '@atlas/protocol';
+import { WORKSPACE_GRAPH_STORE, InMemoryWorkspaceGraphStore } from './workspace-graph-store.contract';
 
 const okResult: QueryResponse = {
   columns: ['name'],
@@ -58,5 +59,33 @@ describe('ConsoleStore', () => {
     const store = withDb(query);
     await store.run('   ');
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('marks a node-bearing result as projectable and projects it to the canvas store', async () => {
+    const nodeResult = {
+      columns: ['p'],
+      rows: [[{ id: 1, labels: ['Person'], props: { name: 'Ada' } }]],
+      stats: { rowsExamined: 1, elapsedMs: 1 },
+    };
+    const database = vi.fn().mockReturnValue({ query: vi.fn().mockResolvedValue(nodeResult) });
+    const fake = new InMemoryWorkspaceGraphStore();
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: AtlasApi, useValue: { database } },
+        { provide: WORKSPACE_GRAPH_STORE, useValue: fake },
+      ],
+    });
+    const store = TestBed.inject(ConsoleStore);
+    store.useDatabase('kb');
+    await store.run('MATCH (p:Person) RETURN p');
+    expect(store.projectable()).toBe(true);
+    store.projectToCanvas();
+    expect(fake.nodes.map((n) => n.id)).toEqual([1]);
+  });
+
+  it('scalar results are not projectable', async () => {
+    const store = withDb(vi.fn().mockResolvedValue(okResult));
+    await store.run('MATCH (p) RETURN p.name AS name');
+    expect(store.projectable()).toBe(false);
   });
 });

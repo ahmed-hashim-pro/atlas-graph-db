@@ -119,6 +119,23 @@ export class GraphStore {
     this.refreshLegendFromData();
   }
 
+  /**
+   * Replace the displayed graph with `incoming`, discarding the previously
+   * loaded nodes/edges (and any selection on a now-absent element) while keeping
+   * the schema-seeded legend entries. Used by the console's "project to canvas"
+   * (via the workspace adapter) so projecting a result swaps the canvas rather
+   * than accumulating onto whatever was already shown.
+   */
+  replaceGraph(incoming: GraphData): void {
+    this._data.set(mergeGraph({ nodes: [], edges: [] }, incoming));
+    const sel = this._selection();
+    if (sel?.kind === 'node' && !this._data().nodes.some((n) => n.id === sel.id))
+      this._selection.set(null);
+    else if (sel?.kind === 'edge' && !this._data().edges.some((e) => e.id === sel.id))
+      this._selection.set(null);
+    this.refreshLegendFromData();
+  }
+
   /** Apply layout positions (from the worker) without disturbing the legend/selection. */
   applyPositions(positions: Map<string, { x: number; y: number }>): void {
     this._data.update((d) => ({

@@ -135,6 +135,25 @@ describe('GraphStore', () => {
     expect(conns.find((c) => c.neighborId === '3')?.direction).toBe('in');
   });
 
+  it('replaceGraph swaps the displayed graph, keeps the schema legend, and clears a stale selection', () => {
+    const store = make();
+    store.ingestSchema(schema); // Person, Doc / KNOWS legend entries survive
+    store.addGraph({ nodes: [node('1'), node('2')], edges: [edge('e', '1', '2')] });
+    store.select({ kind: 'node', id: '1' });
+
+    store.replaceGraph({ nodes: [node('5')], edges: [] });
+
+    // Old nodes are gone; only the projected node is displayed.
+    expect(store.visibleNodes().map((n) => n.id)).toEqual(['5']);
+    expect(store.visibleEdges()).toEqual([]);
+    expect(store.totalNodeCount()).toBe(1);
+    // The selection pointed at node '1', which is no longer present → cleared.
+    expect(store.selection()).toBeNull();
+    // Schema-seeded legend entries are preserved across the replace.
+    expect(store.labels().map((l) => l.label)).toEqual(['Person', 'Doc']);
+    expect(store.edgeTypes().map((t) => t.type)).toEqual(['KNOWS']);
+  });
+
   it('removeNode (live delete) drops the node, its edges, and clears selection if it was selected', () => {
     const store = make();
     store.addGraph({ nodes: [node('1'), node('2')], edges: [edge('e', '1', '2')] });

@@ -7,10 +7,12 @@ import { OnDestroy } from '@angular/core';
 import { AtlasApi } from '../core/atlas-api';
 import { GraphCanvas } from './graph-canvas';
 import { GraphStore } from './graph.store';
+import { GraphStoreWorkspaceAdapter } from './graph-store.adapter';
 import { Inspector } from './inspector';
 import { Legend } from './legend';
 import { DEFAULT_EXPAND_CAP } from './graph-model';
 import { neighborQuery, parseGraphRows } from './expand';
+import { WORKSPACE_GRAPH_STORE } from './workspace-graph-store.contract';
 
 /** Initial query: a capped sample of nodes with their edges to seed the canvas. */
 const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
@@ -19,7 +21,11 @@ const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
   selector: 'app-workspace',
   imports: [RouterLink, GraphCanvas, Inspector, Legend],
   templateUrl: './workspace.html',
-  providers: [GraphStore], // a fresh store per open database
+  providers: [
+    GraphStore, // a fresh store per open database
+    // The console's "project to canvas" targets this workspace's canvas store.
+    { provide: WORKSPACE_GRAPH_STORE, useClass: GraphStoreWorkspaceAdapter },
+  ],
 })
 export class Workspace implements AfterViewInit, OnDestroy {
   readonly store = inject(GraphStore);
