@@ -81,3 +81,33 @@ describe('CALL execution maps onto db.algo', () => {
     expect(r.rows[0]).toHaveLength(1);
   });
 });
+
+describe('CALL YIELD validation uses the static algorithm schema', () => {
+  it("rejects a typo'd YIELD even when the result set is empty", async () => {
+    // A fresh acyclic 2-node graph → algo.cycles returns ZERO rows, but "cyc"
+    // is still an invalid column for algo.cycles (valid: cycle).
+    const d2 = await mkdtemp(join(tmpdir(), 'atlas-call-empty-'));
+    const db2 = await openDatabase(d2);
+    await db2.transact((tx) => {
+      const a = tx.createNode(['V'], {});
+      const b = tx.createNode(['V'], {});
+      tx.createEdge('R', a, b); // acyclic → no cycles
+    });
+    await expect(
+      runCall(call('CALL algo.cycles() YIELD cyc'), db2, {}),
+    ).rejects.toMatchObject({ code: 'SEMANTIC_ERROR' });
+    // A valid YIELD on the same empty result returns the column with no rows.
+    const ok = await runCall(call('CALL algo.cycles() YIELD cycle'), db2, {});
+    expect(ok.columns).toEqual(['cycle']);
+    expect(ok.rows).toEqual([]);
+    await db2.close();
+    await rm(d2, { recursive: true, force: true });
+  });
+
+  it("still rejects a typo'd YIELD on a non-empty result (regression)", async () => {
+    // The shared 3-cycle db has nodes, so algo.degree returns rows; "scor" is invalid.
+    await expect(
+      runCall(call('CALL algo.degree() YIELD node, scor'), db, {}),
+    ).rejects.toMatchObject({ code: 'SEMANTIC_ERROR' });
+  });
+});

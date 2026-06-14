@@ -92,6 +92,21 @@ const ALGOS: Record<string, AlgoRunner> = {
     })),
 };
 
+/** Static output columns each algorithm yields — used to validate YIELD even on empty results. */
+const ALGO_COLUMNS: Record<string, readonly string[]> = {
+  'algo.pagerank': ['node', 'score'],
+  'algo.louvain': ['node', 'community'],
+  'algo.components': ['node', 'component'],
+  'algo.degree': ['node', 'score'],
+  'algo.betweenness': ['node', 'score'],
+  'algo.shortestPath': ['path', 'cost'],
+  'algo.allShortestPaths': ['path', 'cost'],
+  'algo.bfs': ['node', 'depth'],
+  'algo.dfs': ['node', 'depth'],
+  'algo.topoSort': ['node', 'order'],
+  'algo.cycles': ['cycle'],
+};
+
 function num(v: RuntimeValue | undefined): number | undefined {
   return typeof v === 'number' ? v : undefined;
 }
@@ -125,14 +140,17 @@ export async function runCall(
     throw new AqlError('RUNTIME_ERROR', `${stmt.name}: ${(e as Error).message}`, stmt.pos, '');
   }
   const cols = stmt.yields.length > 0 ? stmt.yields : inferColumns(results);
-  for (const y of cols)
-    if (results.length > 0 && !(y.name in results[0]!))
+  const schema = ALGO_COLUMNS[stmt.name];
+  for (const y of cols) {
+    const known = schema ? schema.includes(y.name) : results.length > 0 && y.name in results[0]!;
+    if (!known)
       throw new AqlError(
         'SEMANTIC_ERROR',
         `procedure "${stmt.name}" does not yield "${y.name}"`,
         stmt.pos,
         '',
       );
+  }
   const columns = cols.map((y) => y.alias ?? y.name);
   const rows = results.map((r) => cols.map((y) => r[y.name] ?? null));
   return { columns, rows };
