@@ -1,7 +1,10 @@
 import type {
   DbInfo,
+  ImportReq,
+  ImportResult,
   ProblemDetails,
   QueryResponse,
+  RoleName,
   SubscribeFilter,
   UserInfo,
   WsFrame,
@@ -44,6 +47,27 @@ export interface DbSummary {
 
 export interface SeedResult {
   committed: { nodes: number; edges: number };
+}
+
+/** A user's API token as returned by `GET /api/tokens` (the secret is never listed). */
+export interface TokenSummary {
+  tokenId: string;
+  name: string;
+}
+
+/** The one-time result of `POST /api/tokens`: the full `token` is shown exactly once. */
+export interface CreatedToken {
+  tokenId: string;
+  name: string;
+  /** Full secret (`tokenId.secret`) — surface to the user once, never stored. */
+  token: string;
+}
+
+/** CSV import body for `POST /api/db/:name/import?format=csv`. */
+export interface ImportCsvBody {
+  nodesCsv?: string;
+  edgesCsv?: string;
+  atomic?: boolean;
 }
 
 /**
@@ -263,6 +287,82 @@ export class AtlasClient {
     );
     if (!res.ok) throw await readError(res);
     return (await res.json()) as SeedResult;
+  }
+
+  // ---- tokens ----
+  async createToken(name: string): Promise<CreatedToken> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/tokens`, {
+      method: 'POST',
+      headers: buildHeaders(this.opts, true, this.jar),
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw await readError(res);
+    return (await res.json()) as CreatedToken;
+  }
+
+  async listTokens(): Promise<TokenSummary[]> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/tokens`, {
+      method: 'GET',
+      headers: buildHeaders(this.opts, false, this.jar),
+    });
+    if (!res.ok) throw await readError(res);
+    return (await res.json()) as TokenSummary[];
+  }
+
+  async revokeToken(tokenId: string): Promise<void> {
+    const res = await request(
+      this.opts,
+      this.jar,
+      `${this.baseUrl}/api/tokens/${encodeURIComponent(tokenId)}`,
+      { method: 'DELETE', headers: buildHeaders(this.opts, false, this.jar) },
+    );
+    if (!res.ok) throw await readError(res);
+  }
+
+  // ---- roles (db owner only, enforced server-side) ----
+  async grantRole(name: string, username: string, role: RoleName): Promise<void> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/db/${name}/roles`, {
+      method: 'POST',
+      headers: buildHeaders(this.opts, true, this.jar),
+      body: JSON.stringify({ username, role }),
+    });
+    if (!res.ok) throw await readError(res);
+  }
+
+  async revokeRole(name: string, username: string): Promise<void> {
+    const res = await request(
+      this.opts,
+      this.jar,
+      `${this.baseUrl}/api/db/${name}/roles/${encodeURIComponent(username)}`,
+      { method: 'DELETE', headers: buildHeaders(this.opts, false, this.jar) },
+    );
+    if (!res.ok) throw await readError(res);
+  }
+
+  // ---- import ----
+  async import(name: string, body: ImportReq): Promise<ImportResult> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/db/${name}/import`, {
+      method: 'POST',
+      headers: buildHeaders(this.opts, true, this.jar),
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await readError(res);
+    return (await res.json()) as ImportResult;
+  }
+
+  async importCsv(name: string, body: ImportCsvBody): Promise<ImportResult> {
+    const res = await request(
+      this.opts,
+      this.jar,
+      `${this.baseUrl}/api/db/${name}/import?format=csv`,
+      {
+        method: 'POST',
+        headers: buildHeaders(this.opts, true, this.jar),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) throw await readError(res);
+    return (await res.json()) as ImportResult;
   }
 }
 
