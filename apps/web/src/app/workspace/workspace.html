@@ -1,0 +1,12 @@
+<div class="workspace">
+  <header class="ws-topbar">
+    <a routerLink="/databases" class="ws-back">← Databases</a>
+    <h1 class="ws-title">{{ name }}</h1>
+    <span class="ws-stats">{{ store.shownCount() }} / {{ store.totalNodeCount() }} nodes</span>
+  </header>
+  <div class="ws-body">
+    <app-legend class="ws-rail" />
+    <app-graph-canvas class="ws-canvas" (expandNode)="onExpand($event)" />
+    <app-inspector class="ws-inspector" (expand)="onExpand($event)" />
+  </div>
+</div>

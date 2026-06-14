@@ -1,0 +1,47 @@
+<aside class="inspector" aria-label="Inspector">
+  @if (store.selectedNode(); as n) {
+    <header class="inspector-head">
+      <h2>{{ n.labels.join(' · ') || 'Node' }}</h2>
+      <div class="inspector-actions">
+        <button type="button" class="expand-btn" (click)="expand.emit(n.id)">
+          Expand neighbors
+        </button>
+        <button type="button" class="paths-btn" (click)="findPaths.emit(n.id)">Find paths…</button>
+      </div>
+    </header>
+
+    <h3>Properties</h3>
+    <dl class="props">
+      @for (e of entries(n.props); track e[0]) {
+        <dt>{{ e[0] }}</dt>
+        <dd>{{ e[1] }}</dd>
+      }
+    </dl>
+
+    <h3>Connections ({{ store.connectionsOf(n.id).length }})</h3>
+    <ul class="connections">
+      @for (c of store.connectionsOf(n.id); track c.edge.id) {
+        <li class="connection">
+          <span class="conn-dir">{{ c.direction === 'out' ? '→' : '←' }}</span>
+          <span class="conn-type">{{ c.edge.type }}</span>
+          <button type="button" class="conn-link" (click)="selectNeighbor(c.neighborId)">
+            {{ c.neighborId }}
+          </button>
+        </li>
+      }
+    </ul>
+  } @else if (store.selectedEdge(); as edge) {
+    <header class="inspector-head">
+      <h2>{{ edge.type }}</h2>
+    </header>
+    <h3>Properties</h3>
+    <dl class="props">
+      @for (e of entries(edge.props); track e[0]) {
+        <dt>{{ e[0] }}</dt>
+        <dd>{{ e[1] }}</dd>
+      }
+    </dl>
+  } @else {
+    <p class="inspector-empty">Select a node or edge to inspect it.</p>
+  }
+</aside>

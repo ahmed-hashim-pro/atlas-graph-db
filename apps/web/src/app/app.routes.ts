@@ -14,8 +14,7 @@ export const routes: Routes = [
   {
     path: 'db/:name',
     canActivate: [authGuard],
-    loadComponent: () =>
-      import('./workspace/workspace-placeholder').then((m) => m.WorkspacePlaceholder),
+    loadComponent: () => import('./workspace/workspace').then((m) => m.Workspace),
   },
   { path: '**', redirectTo: 'databases' },
 ];
