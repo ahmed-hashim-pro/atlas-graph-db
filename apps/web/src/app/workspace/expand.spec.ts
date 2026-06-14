@@ -22,18 +22,20 @@ describe('neighborQuery', () => {
 describe('parseGraphRows', () => {
   it('parses node + edge columns into GraphData (deduping by id)', () => {
     // Columns: n (source node), r (edge), m (neighbor node) — the shape neighborQuery returns.
+    // Cells use the REAL Database.query wire shape: raw NodeRecord/EdgeRecord carry `props`
+    // (not `properties`) and numeric ids, which exercises the String(raw.id) coercion too.
     const res: QueryResponse = {
       columns: ['n', 'r', 'm'],
       rows: [
         [
-          { id: '1', labels: ['Person'], properties: { name: 'Ada' } },
-          { id: 'e1', type: 'KNOWS', from: '1', to: '2', properties: {} },
-          { id: '2', labels: ['Person'], properties: { name: 'Bob' } },
+          { id: 1, labels: ['Person'], props: { name: 'Ada' } },
+          { id: 'e1', type: 'KNOWS', from: 1, to: 2, props: {} },
+          { id: 2, labels: ['Person'], props: { name: 'Bob' } },
         ],
         [
-          { id: '1', labels: ['Person'], properties: { name: 'Ada' } },
-          { id: 'e2', type: 'KNOWS', from: '1', to: '3', properties: {} },
-          { id: '3', labels: ['Person'], properties: { name: 'Cy' } },
+          { id: 1, labels: ['Person'], props: { name: 'Ada' } },
+          { id: 'e2', type: 'KNOWS', from: 1, to: 3, props: {} },
+          { id: 3, labels: ['Person'], props: { name: 'Cy' } },
         ],
       ],
       stats: { rowsExamined: 2, elapsedMs: 1 },
@@ -45,14 +47,19 @@ describe('parseGraphRows', () => {
     expect(data.edges[0]).toMatchObject({ from: '1', to: '2', type: 'KNOWS' });
   });
 
-  it('tolerates rows with null/absent edge or neighbor cells', () => {
+  it('tolerates rows with null or absent edge/neighbor cells', () => {
     const res: QueryResponse = {
       columns: ['n', 'r', 'm'],
-      rows: [[{ id: '1', labels: ['Person'], properties: {} }, null, null]],
-      stats: { rowsExamined: 1, elapsedMs: 0 },
+      rows: [
+        // explicit null edge + neighbor cells
+        [{ id: 1, labels: ['Person'], props: {} }, null, null],
+        // genuinely absent trailing cells (short row array)
+        [{ id: 4, labels: ['Person'], props: {} }],
+      ],
+      stats: { rowsExamined: 2, elapsedMs: 0 },
     };
     const data = parseGraphRows(res);
-    expect(data.nodes.map((n) => n.id)).toEqual(['1']);
+    expect(data.nodes.map((n) => n.id).sort()).toEqual(['1', '4']);
     expect(data.edges).toEqual([]);
   });
 

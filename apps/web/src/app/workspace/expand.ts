@@ -1,18 +1,29 @@
 import type { QueryResponse } from '@atlas/protocol';
 import { DEFAULT_EXPAND_CAP, type GraphData, type GraphEdge, type GraphNode } from './graph-model';
 
-/** A node value as returned in a graph-shaped query row. */
+/**
+ * A node value as returned in a graph-shaped `Database.query` row. The engine
+ * emits raw `NodeRecord`s, whose property bag is `props` (see `@atlas/core`
+ * `NodeRecord`). `properties` is accepted as a fallback for the REST data-route
+ * shape, but `props` is the wire contract that `Database.query` actually returns.
+ */
 interface RawNode {
   id: string | number;
   labels?: string[];
+  props?: Record<string, unknown>;
   properties?: Record<string, unknown>;
 }
-/** An edge value as returned in a graph-shaped query row. */
+/**
+ * An edge value as returned in a graph-shaped `Database.query` row. The engine
+ * emits raw `EdgeRecord`s, whose property bag is `props` (see `@atlas/core`
+ * `EdgeRecord`); `properties` is accepted only as a fallback.
+ */
 interface RawEdge {
   id: string | number;
   type?: string;
   from?: string | number;
   to?: string | number;
+  props?: Record<string, unknown>;
   properties?: Record<string, unknown>;
 }
 
@@ -36,7 +47,7 @@ function isRawEdge(v: unknown): v is RawEdge {
   return typeof v === 'object' && v !== null && 'id' in v && 'type' in v && 'from' in v && 'to' in v;
 }
 function toNode(raw: RawNode): GraphNode {
-  return { id: String(raw.id), labels: raw.labels ?? [], props: raw.properties ?? {} };
+  return { id: String(raw.id), labels: raw.labels ?? [], props: raw.props ?? raw.properties ?? {} };
 }
 function toEdge(raw: RawEdge): GraphEdge {
   return {
@@ -44,11 +55,16 @@ function toEdge(raw: RawEdge): GraphEdge {
     from: String(raw.from),
     to: String(raw.to),
     type: raw.type ?? '',
-    props: raw.properties ?? {},
+    props: raw.props ?? raw.properties ?? {},
   };
 }
 
-/** Collect every node/edge value found in any cell of a graph-shaped result, deduped by id. */
+/**
+ * Collect every node/edge value found in any cell of a graph-shaped result,
+ * deduped by id. Endpoint integrity is NOT enforced here: edges whose endpoints
+ * are not present are kept and dropped/held later by `GraphStore.addGraph`
+ * (`mergeGraph`), so this stays a pure shape transform.
+ */
 export function parseGraphRows(res: QueryResponse): GraphData {
   const nodes = new Map<string, GraphNode>();
   const edges = new Map<string, GraphEdge>();
