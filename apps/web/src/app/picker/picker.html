@@ -1,0 +1,46 @@
+<section class="picker">
+  <header class="picker-head">
+    <h1>Databases</h1>
+    <form class="create" (ngSubmit)="create()">
+      <label class="sr-only" for="new-db">New database name</label>
+      <input
+        id="new-db"
+        name="new-db"
+        placeholder="new-database"
+        [ngModel]="newName()"
+        (ngModelChange)="newName.set($event)"
+      />
+      <button type="submit" [disabled]="creating() || !newName().trim()">Create</button>
+    </form>
+  </header>
+
+  @if (store.error()) {
+    <p class="error" role="alert">{{ store.error() }}</p>
+  }
+
+  @if (store.loading()) {
+    <p>Loading…</p>
+  } @else if (store.databases().length === 0) {
+    <p class="empty">No databases yet. Create one above to get started.</p>
+  } @else {
+    <ul class="db-list">
+      @for (db of store.databases(); track db.name) {
+        <li class="db-card">
+          <div class="db-meta">
+            <button class="db-name" type="button" (click)="open(db.name)">{{ db.name }}</button>
+            <span class="role role-{{ db.role }}">{{ db.role }}</span>
+          </div>
+          @if (db.description) {
+            <p class="db-desc">{{ db.description }}</p>
+          }
+          <div class="db-actions">
+            <button type="button" (click)="open(db.name)">Open</button>
+            @if (db.role === 'owner' || db.role === 'editor') {
+              <button type="button" (click)="seed(db.name)">Seed science-history</button>
+            }
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>
