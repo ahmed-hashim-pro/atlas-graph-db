@@ -1,11 +1,11 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { PickerStore } from './picker.store';
 
 @Component({
   selector: 'app-picker',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './picker.html',
 })
 export class Picker implements OnInit {

@@ -12,7 +12,10 @@ describe('Admin page', () => {
       providers: [
         {
           provide: AtlasApi,
-          useValue: { listTokens: vi.fn().mockResolvedValue([]), listDatabases: vi.fn().mockResolvedValue([]) },
+          useValue: {
+            listTokens: vi.fn().mockResolvedValue([]),
+            listDatabases: vi.fn().mockResolvedValue([]),
+          },
         },
       ],
     }).compileComponents();
