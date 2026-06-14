@@ -25,7 +25,9 @@ describe('formatCell', () => {
   });
 
   it('renders a node as :Label {name…} and an edge as -[:TYPE]->', () => {
-    expect(formatCell({ id: 1, labels: ['Person'], props: { name: 'Ada' } })).toBe(':Person {name: Ada}');
+    expect(formatCell({ id: 1, labels: ['Person'], props: { name: 'Ada' } })).toBe(
+      ':Person {name: Ada}',
+    );
     expect(formatCell({ id: 5, type: 'KNOWS', from: 1, to: 2, props: {} })).toBe('-[:KNOWS]->');
   });
 });
@@ -39,7 +41,11 @@ describe('extractGraphElements', () => {
         { id: 5, type: 'KNOWS', from: 1, to: 2, props: {} },
         { id: 2, labels: ['Person'], props: { name: 'Bob' } },
       ],
-      [{ id: 1, labels: ['Person'], props: { name: 'Ada' } }, null, { id: 2, labels: ['Person'], props: {} }],
+      [
+        { id: 1, labels: ['Person'], props: { name: 'Ada' } },
+        null,
+        { id: 2, labels: ['Person'], props: {} },
+      ],
     ];
     const g = extractGraphElements(columns, rows);
     expect(g.nodes.map((n) => n.id).sort()).toEqual([1, 2]);

@@ -3,7 +3,13 @@
 } @else {
   <ul class="plan-tree" role="tree" aria-label="Query plan">
     @for (row of rows(); track $index) {
-      <li class="plan-row" role="treeitem" [attr.aria-level]="row.depth + 1" [style.padding-left]="indent(row.depth)">
+      <li
+        class="plan-row"
+        role="treeitem"
+        aria-selected="false"
+        [attr.aria-level]="row.depth + 1"
+        [style.padding-left]="indent(row.depth)"
+      >
         <span class="plan-op">{{ row.op }}</span>
         @if (row.estCost !== undefined) {
           <span class="plan-cost">~{{ row.estCost }}</span>

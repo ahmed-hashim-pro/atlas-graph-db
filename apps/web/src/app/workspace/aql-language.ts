@@ -1,17 +1,69 @@
-import { StreamLanguage, LanguageSupport, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import {
+  StreamLanguage,
+  LanguageSupport,
+  HighlightStyle,
+  syntaxHighlighting,
+} from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
 /** §5.2 clause + operator keywords, upper-cased; matching is case-insensitive at tokenize time. */
 export const AQL_KEYWORDS: readonly string[] = [
-  'MATCH', 'OPTIONAL', 'WHERE', 'RETURN', 'DISTINCT', 'AS', 'ORDER', 'BY', 'ASC', 'DESC',
-  'SKIP', 'LIMIT', 'CREATE', 'MERGE', 'SET', 'REMOVE', 'DELETE', 'DETACH', 'ON',
-  'AND', 'OR', 'NOT', 'IN', 'CONTAINS', 'STARTS', 'ENDS', 'WITH', 'EXISTS',
-  'INDEX', 'UNIQUE', 'CONSTRAINT', 'FULLTEXT', 'SHOW', 'INDEXES', 'CONSTRAINTS', 'DROP',
-  'CALL', 'YIELD', 'EXPLAIN', 'TRUE', 'FALSE', 'NULL',
+  'MATCH',
+  'OPTIONAL',
+  'WHERE',
+  'RETURN',
+  'DISTINCT',
+  'AS',
+  'ORDER',
+  'BY',
+  'ASC',
+  'DESC',
+  'SKIP',
+  'LIMIT',
+  'CREATE',
+  'MERGE',
+  'SET',
+  'REMOVE',
+  'DELETE',
+  'DETACH',
+  'ON',
+  'AND',
+  'OR',
+  'NOT',
+  'IN',
+  'CONTAINS',
+  'STARTS',
+  'ENDS',
+  'WITH',
+  'EXISTS',
+  'INDEX',
+  'UNIQUE',
+  'CONSTRAINT',
+  'FULLTEXT',
+  'SHOW',
+  'INDEXES',
+  'CONSTRAINTS',
+  'DROP',
+  'CALL',
+  'YIELD',
+  'EXPLAIN',
+  'TRUE',
+  'FALSE',
+  'NULL',
 ];
 
 /** §5.2 aggregate/utility function names (lower-cased; used for completion + highlight). */
-export const AQL_FUNCTIONS: readonly string[] = ['count', 'collect', 'sum', 'avg', 'min', 'max', 'labels', 'type', 'id'];
+export const AQL_FUNCTIONS: readonly string[] = [
+  'count',
+  'collect',
+  'sum',
+  'avg',
+  'min',
+  'max',
+  'labels',
+  'type',
+  'id',
+];
 
 const KEYWORD_SET = new Set(AQL_KEYWORDS);
 
@@ -19,7 +71,16 @@ export interface AqlToken {
   text: string;
   /** 0-based start offset within the source. */
   start: number;
-  kind: 'keyword' | 'identifier' | 'number' | 'string' | 'parameter' | 'label' | 'operator' | 'punctuation' | 'comment';
+  kind:
+    | 'keyword'
+    | 'identifier'
+    | 'number'
+    | 'string'
+    | 'parameter'
+    | 'label'
+    | 'operator'
+    | 'punctuation'
+    | 'comment';
 }
 
 const OPERATOR_CHARS = new Set(['<', '>', '=', '!', '+', '-', '*', '/']);
@@ -92,7 +153,11 @@ export function tokenizeAql(src: string): AqlToken[] {
       let j = i + 1;
       while (j < src.length && isIdentPart(src[j]!)) j++;
       const text = src.slice(i, j);
-      out.push({ text, start: i, kind: KEYWORD_SET.has(text.toUpperCase()) ? 'keyword' : 'identifier' });
+      out.push({
+        text,
+        start: i,
+        kind: KEYWORD_SET.has(text.toUpperCase()) ? 'keyword' : 'identifier',
+      });
       i = j;
       continue;
     }

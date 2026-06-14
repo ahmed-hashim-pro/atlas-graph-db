@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planToTree, type PlanTreeRow } from './explain-plan';
 
-function labels(rows: PlanTreeRow[]): Array<[number, string]> {
+function labels(rows: PlanTreeRow[]): [number, string][] {
   return rows.map((r) => [r.depth, r.op]);
 }
 
@@ -12,7 +12,7 @@ describe('planToTree', () => {
       columns: ['name'],
       child: {
         op: 'Filter',
-        expr: "p.born > 1800",
+        expr: 'p.born > 1800',
         child: { op: 'LabelScan', variable: 'p', label: 'Person', estCost: 3 },
       },
     };
@@ -41,7 +41,13 @@ describe('planToTree', () => {
   });
 
   it('handles a flat write plan ({ op: Write, steps: [...] })', () => {
-    const plan = { op: 'Write', steps: [{ op: 'Create', patterns: 1 }, { op: 'Project', columns: 1 }] };
+    const plan = {
+      op: 'Write',
+      steps: [
+        { op: 'Create', patterns: 1 },
+        { op: 'Project', columns: 1 },
+      ],
+    };
     expect(labels(planToTree(plan))).toEqual([
       [0, 'Write'],
       [1, 'Create'],

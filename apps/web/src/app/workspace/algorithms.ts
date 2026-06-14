@@ -45,14 +45,24 @@ export const ALGORITHMS: readonly AlgorithmSpec[] = [
   {
     name: 'algo.components',
     label: 'Connected components',
-    params: [{ key: 'mode', label: 'Mode', type: 'enum', options: ['weak', 'strong'], default: 'weak' }],
+    params: [
+      { key: 'mode', label: 'Mode', type: 'enum', options: ['weak', 'strong'], default: 'weak' },
+    ],
     yields: ['node', 'component'],
     paint: 'component',
   },
   {
     name: 'algo.degree',
     label: 'Degree centrality',
-    params: [{ key: 'direction', label: 'Direction', type: 'enum', options: ['both', 'out', 'in'], default: 'both' }],
+    params: [
+      {
+        key: 'direction',
+        label: 'Direction',
+        type: 'enum',
+        options: ['both', 'out', 'in'],
+        default: 'both',
+      },
+    ],
     yields: ['node', 'score'],
     paint: 'score',
   },
@@ -141,7 +151,10 @@ function isSet(v: number | string | undefined): v is number | string {
  * Build an injection-safe `CALL algo.<name>({k: $k, …}) YIELD … RETURN …` string.
  * Every literal flows through `$params`, never string interpolation.
  */
-export function buildAlgorithmCall(spec: AlgorithmSpec, values: Record<string, number | string>): BuiltCall {
+export function buildAlgorithmCall(
+  spec: AlgorithmSpec,
+  values: Record<string, number | string>,
+): BuiltCall {
   const params: Record<string, number | string> = {};
   const entries: string[] = [];
   for (const p of spec.params) {
@@ -172,13 +185,20 @@ function isPathLike(v: unknown): v is PathLike {
  * Map YIELD rows to canvas styling (§7.2): node size from score, color from
  * community/component, highlighted node sequences from path/cycle results.
  */
-export function paintFromRows(spec: AlgorithmSpec, columns: string[], rows: unknown[][]): AlgorithmPaint {
+export function paintFromRows(
+  spec: AlgorithmSpec,
+  columns: string[],
+  rows: unknown[][],
+): AlgorithmPaint {
   const scores = new Map<number, number>();
   const communities = new Map<number, number>();
   const paths: number[][] = [];
   const nodeIdx = columns.indexOf('node');
-  const valueCol = spec.paint === 'community' ? 'community' : spec.paint === 'component' ? 'component' : 'score';
-  const valueIdx = spec.yields.includes(valueCol) ? columns.indexOf(valueCol) : columns.indexOf('depth');
+  const valueCol =
+    spec.paint === 'community' ? 'community' : spec.paint === 'component' ? 'component' : 'score';
+  const valueIdx = spec.yields.includes(valueCol)
+    ? columns.indexOf(valueCol)
+    : columns.indexOf('depth');
 
   for (const row of rows) {
     if (spec.paint === 'path') {

@@ -5,7 +5,11 @@ import { Console } from './console';
 
 describe('Console host', () => {
   it('runs the editor query through the store and shows the results table', async () => {
-    const query = vi.fn().mockResolvedValue({ columns: ['name'], rows: [['Ada']], stats: { rowsExamined: 1, elapsedMs: 1 } });
+    const query = vi.fn().mockResolvedValue({
+      columns: ['name'],
+      rows: [['Ada']],
+      stats: { rowsExamined: 1, elapsedMs: 1 },
+    });
     const schema = vi.fn().mockResolvedValue({ labels: [], edgeTypes: [] });
     await TestBed.configureTestingModule({
       imports: [Console],
@@ -23,11 +27,29 @@ describe('Console host', () => {
 
   it('renders the structured error banner with the caret snippet', async () => {
     const query = vi.fn().mockRejectedValue(
-      Object.assign(new Error('bad'), { problem: { code: 'PARSE_ERROR', detail: 'bad token', line: 1, column: 3, snippet: 'XY\n  ^' } }),
+      Object.assign(new Error('bad'), {
+        problem: {
+          code: 'PARSE_ERROR',
+          detail: 'bad token',
+          line: 1,
+          column: 3,
+          snippet: 'XY\n  ^',
+        },
+      }),
     );
     await TestBed.configureTestingModule({
       imports: [Console],
-      providers: [{ provide: AtlasApi, useValue: { database: () => ({ query, schema: vi.fn().mockResolvedValue({ labels: [], edgeTypes: [] }) }) } }],
+      providers: [
+        {
+          provide: AtlasApi,
+          useValue: {
+            database: () => ({
+              query,
+              schema: vi.fn().mockResolvedValue({ labels: [], edgeTypes: [] }),
+            }),
+          },
+        },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Console);
     fixture.componentRef.setInput('database', 'kb');
