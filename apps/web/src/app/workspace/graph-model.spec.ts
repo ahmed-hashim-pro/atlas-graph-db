@@ -18,7 +18,10 @@ function edge(id: string, from: string, to: string, type = 'KNOWS'): GraphEdge {
 describe('mergeGraph', () => {
   it('unions nodes and edges by id, last-write-wins on props', () => {
     const a = { nodes: [node('1')], edges: [] as GraphEdge[] };
-    const b = { nodes: [{ ...node('1'), props: { name: 'X' } }, node('2')], edges: [edge('e1', '1', '2')] };
+    const b = {
+      nodes: [{ ...node('1'), props: { name: 'X' } }, node('2')],
+      edges: [edge('e1', '1', '2')],
+    };
     const merged = mergeGraph(a, b);
     expect(merged.nodes.map((n) => n.id).sort()).toEqual(['1', '2']);
     expect(merged.nodes.find((n) => n.id === '1')?.props['name']).toBe('X');
@@ -26,7 +29,10 @@ describe('mergeGraph', () => {
   });
 
   it('drops edges whose endpoints are not (yet) present', () => {
-    const merged = mergeGraph({ nodes: [node('1')], edges: [] }, { nodes: [], edges: [edge('e', '1', '999')] });
+    const merged = mergeGraph(
+      { nodes: [node('1')], edges: [] },
+      { nodes: [], edges: [edge('e', '1', '999')] },
+    );
     expect(merged.edges).toEqual([]);
   });
 });
@@ -62,7 +68,10 @@ describe('applyVisibility', () => {
   it('hides edges of a toggled-off type but keeps the nodes', () => {
     const nodes = [node('1'), node('2')];
     const edges = [edge('e', '1', '2', 'KNOWS')];
-    const out = applyVisibility({ nodes, edges }, { hiddenLabels: new Set(), hiddenTypes: new Set(['KNOWS']) });
+    const out = applyVisibility(
+      { nodes, edges },
+      { hiddenLabels: new Set(), hiddenTypes: new Set(['KNOWS']) },
+    );
     expect(out.nodes).toHaveLength(2);
     expect(out.edges).toEqual([]);
   });

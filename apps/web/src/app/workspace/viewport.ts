@@ -47,7 +47,10 @@ export function fitToNodes(
   const maxY = Math.max(...ys);
   const spanX = Math.max(1, maxX - minX);
   const spanY = Math.max(1, maxY - minY);
-  const k = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min((width - 2 * padding) / spanX, (height - 2 * padding) / spanY)));
+  const k = Math.min(
+    MAX_ZOOM,
+    Math.max(MIN_ZOOM, Math.min((width - 2 * padding) / spanX, (height - 2 * padding) / spanY)),
+  );
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
   return { k, tx: width / 2 - cx * k, ty: height / 2 - cy * k };

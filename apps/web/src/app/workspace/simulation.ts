@@ -49,10 +49,18 @@ function mulberry32(seed: number): () => number {
 function build(graph: SimGraph, seed: number): Simulation<SimNode, undefined> {
   // d3-force mutates node objects; clone so the caller's data is untouched.
   const nodes: SimNode[] = graph.nodes.map((n) => ({ ...n }));
-  const links: SimulationLinkDatum<SimNode>[] = graph.edges.map((e) => ({ source: e.source, target: e.target }));
+  const links: SimulationLinkDatum<SimNode>[] = graph.edges.map((e) => ({
+    source: e.source,
+    target: e.target,
+  }));
   const sim = forceSimulation<SimNode>(nodes)
     .force('charge', forceManyBody().strength(-120))
-    .force('link', forceLink<SimNode, SimulationLinkDatum<SimNode>>(links).id((d) => d.id).distance(40))
+    .force(
+      'link',
+      forceLink<SimNode, SimulationLinkDatum<SimNode>>(links)
+        .id((d) => d.id)
+        .distance(40),
+    )
     .force('center', forceCenter(0, 0))
     .randomSource(mulberry32(seed))
     .stop();
@@ -72,7 +80,8 @@ export function runSimulation(graph: SimGraph, opts: SimOptions = {}): Positions
   for (let i = 0; i < ticks; i++) sim.tick();
   const positions = snapshot(sim);
   // Pinned nodes report their fixed coordinates exactly.
-  for (const n of graph.nodes) if (n.fx != null && n.fy != null) positions.set(n.id, { x: n.fx, y: n.fy });
+  for (const n of graph.nodes)
+    if (n.fx != null && n.fy != null) positions.set(n.id, { x: n.fx, y: n.fy });
   return positions;
 }
 

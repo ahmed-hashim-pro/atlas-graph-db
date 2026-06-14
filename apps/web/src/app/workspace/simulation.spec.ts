@@ -37,11 +37,7 @@ describe('runSimulation (plain, seeded)', () => {
 
   it('honors pinned (fixed) nodes — a pinned node stays at its given coordinates', () => {
     const graph: SimGraph = {
-      nodes: [
-        { id: 'a', fx: 100, fy: 100 },
-        { id: 'b' },
-        { id: 'c' },
-      ],
+      nodes: [{ id: 'a', fx: 100, fy: 100 }, { id: 'b' }, { id: 'c' }],
       edges: [
         { source: 'a', target: 'b' },
         { source: 'b', target: 'c' },

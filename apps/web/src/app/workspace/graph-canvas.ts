@@ -9,15 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { GraphStore } from './graph.store';
-import {
-  fitToNodes,
-  IDENTITY,
-  panBy,
-  screenToWorld,
-  worldToScreen,
-  zoomAt,
-  type Point,
-} from './viewport';
+import { fitToNodes, IDENTITY, panBy, screenToWorld, zoomAt, type Point } from './viewport';
 import { hitTest } from './hit-test';
 import { drawGraph } from './renderer';
 import { makeColorOf, resolveRenderTheme } from './theme-colors';
@@ -71,7 +63,8 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
 
   /** Re-read theme tokens from the host's computed style (call when the theme changes). */
   refreshTheme(): void {
-    const style = typeof getComputedStyle === 'function' ? getComputedStyle(this.host.nativeElement) : null;
+    const style =
+      typeof getComputedStyle === 'function' ? getComputedStyle(this.host.nativeElement) : null;
     this.theme = resolveRenderTheme((prop) => (style ? style.getPropertyValue(prop) : ''));
     this.colorOf = makeColorOf(this.theme.nodePalette);
   }
@@ -123,7 +116,12 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
   }
 
   private pick(ev: { offsetX: number; offsetY: number }): string | null {
-    return hitTest({ x: ev.offsetX, y: ev.offsetY }, this.store.visibleNodes(), this.viewport(), NODE_RADIUS + 2);
+    return hitTest(
+      { x: ev.offsetX, y: ev.offsetY },
+      this.store.visibleNodes(),
+      this.viewport(),
+      NODE_RADIUS + 2,
+    );
   }
 
   onPointerDown(ev: PointerEvent): void {

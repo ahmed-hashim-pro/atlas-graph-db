@@ -41,7 +41,12 @@ describe('GraphCanvas component', () => {
     const { fixture, cmp } = setup();
     fixture.detectChanges();
     const before = cmp.viewport().k;
-    cmp.onWheel({ offsetX: 100, offsetY: 100, deltaY: -100, preventDefault: vi.fn() } as unknown as WheelEvent);
+    cmp.onWheel({
+      offsetX: 100,
+      offsetY: 100,
+      deltaY: -100,
+      preventDefault: vi.fn(),
+    } as unknown as WheelEvent);
     expect(cmp.viewport().k).toBeGreaterThan(before);
   });
 
@@ -59,7 +64,13 @@ describe('GraphCanvas component', () => {
     const { fixture, cmp, store } = setup();
     store.addGraph({ nodes: [{ id: 'a', labels: [], props: {}, x: 0, y: 0 }], edges: [] });
     fixture.detectChanges();
-    cmp.onContextMenu({ offsetX: 0, offsetY: 0, clientX: 12, clientY: 34, preventDefault: vi.fn() } as unknown as MouseEvent);
+    cmp.onContextMenu({
+      offsetX: 0,
+      offsetY: 0,
+      clientX: 12,
+      clientY: 34,
+      preventDefault: vi.fn(),
+    } as unknown as MouseEvent);
     expect(cmp.contextMenu()).toMatchObject({ nodeId: 'a', x: 12, y: 34 });
   });
 

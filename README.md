@@ -4,14 +4,18 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
-**Status:** M6a — Knowledge Graph Explorer foundation (`apps/web`, Angular 20
-standalone + signals + zoneless): the `@atlas/client` SDK gains a cookie/session
-mode so the app talks to the server exclusively through it; three first-class
-themes (Midnight Observatory, Clean Laboratory, Neon Terminal) with a persisted
-ThemeService; auth (login/register + route guard); and an authenticated shell
-with a database picker (list/create/seed/open). The graph workspace canvas,
-AQL console, schema view, algorithms view, and admin land in M6b–M6d; the
-`/db/:name` route is a placeholder here.
+**Status:** M6b — Knowledge Graph Explorer workspace (`apps/web`): the `/db/:name`
+route is now the real graph workspace — a Canvas2D graph canvas as the hero with a
+seeded d3-force layout running in a Web Worker, a framework-agnostic signal-based
+graph store (visible node/edge set, selection, label/edge-type visibility toggles
+with counts, and a render cap with "showing N of M"), pure viewport zoom/pan +
+point→node hit-testing, a theme-reactive renderer (colors from the active token
+set), pointer interactions (zoom/pan, click-select, drag-to-pin, double-click
+expand-neighbors capped+paged via AQL, right-click context menu), a left
+label/edge legend, a right inspector (read-only properties + connection list +
+expand/paths actions), and live updates via the change feed. The AQL console,
+schema view, and algorithms view land in M6c; admin, import UI, ⌘K search, and
+inspector editing land in M6d.
 Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`.
 
 ## Develop

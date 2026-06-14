@@ -73,7 +73,10 @@ export function mergeGraph(a: GraphData, b: GraphData): GraphData {
   for (const n of b.nodes) {
     const prev = nodes.get(n.id);
     // Preserve any existing position/pin so a re-merge does not reset the layout.
-    nodes.set(n.id, prev ? { ...n, x: n.x ?? prev.x, y: n.y ?? prev.y, pinned: n.pinned ?? prev.pinned } : n);
+    nodes.set(
+      n.id,
+      prev ? { ...n, x: n.x ?? prev.x, y: n.y ?? prev.y, pinned: n.pinned ?? prev.pinned } : n,
+    );
   }
   const edges = new Map<string, GraphEdge>();
   for (const e of [...a.edges, ...b.edges]) edges.set(e.id, e);
