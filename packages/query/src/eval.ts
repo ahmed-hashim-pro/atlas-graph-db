@@ -115,6 +115,10 @@ export function evalExpr(e: Expr, binding: Binding, ctx: EvalContext): RuntimeVa
           e.pos,
           ctx.source,
         );
+      if (e.func === 'lower') {
+        const v = e.arg === '*' ? null : evalExpr(e.arg, binding, ctx);
+        return typeof v === 'string' ? v.toLowerCase() : null;
+      }
       const arg = e.arg === '*' ? null : evalExpr(e.arg, binding, ctx);
       if (arg === null || !isRecord(arg))
         throw new AqlError(
