@@ -29,13 +29,12 @@ export class GraphStoreWorkspaceAdapter implements WorkspaceGraphStore {
   }
 
   /**
-   * Algorithm painting (node size = score, color = community, highlighted paths)
-   * extends the renderer/store and is implemented in Task 8; this adapter gains
-   * the real painting wiring there. No-op until then so the contract is honored.
+   * Apply algorithm output styling (node size = score, color = community,
+   * highlighted paths) to the canvas via the store's `applyAlgorithmPaint`, which
+   * stamps per-node `size`/`color`/`highlighted` overrides honored by the renderer.
    */
   paintAlgorithmResult(paint: AlgorithmPaint): void {
-    // Task 8: apply size/color/highlight overrides to GraphStore + renderer.
-    void paint;
+    this.store.applyAlgorithmPaint(paint);
   }
 }
 
