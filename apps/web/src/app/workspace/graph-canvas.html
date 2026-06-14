@@ -1,0 +1,30 @@
+<div class="canvas-wrap">
+  <canvas
+    #canvas
+    width="800"
+    height="600"
+    tabindex="0"
+    aria-label="Graph canvas"
+    (pointerdown)="onPointerDown($event)"
+    (pointermove)="onPointerMove($event)"
+    (pointerup)="onPointerUp($event)"
+    (wheel)="onWheel($event)"
+    (dblclick)="onDblClick($event)"
+    (contextmenu)="onContextMenu($event)"
+  ></canvas>
+
+  @if (store.isCapped()) {
+    <div class="cap-badge" role="status">
+      Showing {{ store.shownCount() }} of {{ store.totalNodeCount() }} nodes — narrow the legend to
+      see more.
+    </div>
+  }
+
+  @if (contextMenu(); as menu) {
+    <ul class="context-menu" [style.left.px]="menu.x" [style.top.px]="menu.y" role="menu">
+      <li><button type="button" (click)="expandFromMenu(menu.nodeId)">Expand neighbors</button></li>
+      <li><button type="button" (click)="unpinFromMenu(menu.nodeId)">Unpin</button></li>
+      <li><button type="button" (click)="hideMenu()">Close</button></li>
+    </ul>
+  }
+</div>
