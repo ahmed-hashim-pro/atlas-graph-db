@@ -13,7 +13,8 @@
     "test:web": "pnpm -F web exec ng test --watch=false",
     "lint": "eslint .",
     "format": "prettier --check .",
-    "format:fix": "prettier --write ."
+    "format:fix": "prettier --write .",
+    "e2e:web": "pnpm -F web e2e"
   },
   "devDependencies": {
     "@types/node": "^24",

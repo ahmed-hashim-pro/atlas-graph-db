@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "test": "ng test --watch=false",
-    "lint": "ng lint"
+    "lint": "ng lint",
+    "e2e": "playwright test"
   },
   "prettier": {
     "printWidth": 100,
@@ -39,6 +40,7 @@
     "@angular/cli": "^20.3.28",
     "@angular/compiler-cli": "^20.3.0",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.60.0",
     "angular-eslint": "22.0.0",
     "eslint": "^10.3.0",
     "jsdom": "^29",

@@ -14,7 +14,10 @@ describe('Login component', () => {
     const login = vi.fn().mockResolvedValue(ada);
     await TestBed.configureTestingModule({
       imports: [Login],
-      providers: [provideRouter([]), { provide: AtlasApi, useValue: { login, whoami: vi.fn().mockResolvedValue(null) } }],
+      providers: [
+        provideRouter([]),
+        { provide: AtlasApi, useValue: { login, whoami: vi.fn().mockResolvedValue(null) } },
+      ],
     }).compileComponents();
     const router = TestBed.inject(Router);
     const navSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
@@ -32,7 +35,10 @@ describe('Login component', () => {
     const login = vi.fn().mockRejectedValue(Object.assign(new Error('bad'), { status: 401 }));
     await TestBed.configureTestingModule({
       imports: [Login],
-      providers: [provideRouter([]), { provide: AtlasApi, useValue: { login, whoami: vi.fn().mockResolvedValue(null) } }],
+      providers: [
+        provideRouter([]),
+        { provide: AtlasApi, useValue: { login, whoami: vi.fn().mockResolvedValue(null) } },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Login);
     const cmp = fixture.componentInstance;

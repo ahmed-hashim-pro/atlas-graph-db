@@ -41,7 +41,9 @@ describe('PickerStore', () => {
   });
 
   it('create() surfaces a 409 as a friendly error and does not throw', async () => {
-    const createDatabase = vi.fn().mockRejectedValue(Object.assign(new Error('dup'), { status: 409 }));
+    const createDatabase = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('dup'), { status: 409 }));
     const store = withApi({ listDatabases: vi.fn().mockResolvedValue([]), createDatabase });
     await store.create('kb');
     expect(store.error()).toContain('already exists');
