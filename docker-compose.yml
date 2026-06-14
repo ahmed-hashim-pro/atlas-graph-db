@@ -7,7 +7,7 @@ services:
       ATLAS_SECRET: ${ATLAS_SECRET:?set ATLAS_SECRET to a 32+ char string}
       ATLAS_ADMIN_USER: ${ATLAS_ADMIN_USER:-admin}
       ATLAS_ADMIN_PASSWORD: ${ATLAS_ADMIN_PASSWORD:?set ATLAS_ADMIN_PASSWORD}
-      ATLAS_STATIC_DIR: /app/apps/web/dist
+      ATLAS_STATIC_DIR: /app/apps/web/dist/web/browser
       ATLAS_CORS_ORIGINS: ${ATLAS_CORS_ORIGINS:-}
     volumes:
       - atlas-data:/data
