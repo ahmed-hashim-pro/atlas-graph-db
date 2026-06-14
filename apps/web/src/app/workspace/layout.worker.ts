@@ -10,7 +10,10 @@ export type LayoutInbound =
   | { type: 'stop' };
 
 /** worker → main. */
-export type LayoutOutbound = { type: 'positions'; positions: [string, { x: number; y: number }][] };
+export interface LayoutOutbound {
+  type: 'positions';
+  positions: [string, { x: number; y: number }][];
+}
 
 let sim: RunningSimulation | null = null;
 

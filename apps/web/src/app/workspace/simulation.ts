@@ -28,7 +28,13 @@ export interface SimOptions {
 }
 export type Positions = Map<string, { x: number; y: number }>;
 
-/** Deterministic mulberry32 PRNG — d3-force calls the injected RNG for initial placement + jitter. */
+/**
+ * Deterministic mulberry32 PRNG — d3-force calls the injected RNG for initial placement + jitter.
+ * Note: the `seed` makes ticks deterministic (stable tests), but it does NOT vary the layout for
+ * normal graphs: d3-force lays nodes on a fixed phyllotaxis spiral and only consults the RNG to
+ * jitter coincident nodes (x===0), which never happens here. The seed is meaningful only for that
+ * coincident-node jitter; treat it as a determinism knob, not a layout-variation knob.
+ */
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -90,7 +96,7 @@ export function createSimulation(graph: SimGraph, opts: SimOptions = {}): Runnin
         node.fx = x;
         node.fy = y;
       }
-      sim.alpha(0.3).restart().stop(); // reheat so the pin takes effect on the next tick
+      sim.alpha(0.3); // reheat so neighbors settle around the new pin on subsequent ticks
     },
     stop: () => sim.stop(),
   };
