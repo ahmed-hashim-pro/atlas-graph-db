@@ -2,8 +2,6 @@ import { Injectable, signal } from '@angular/core';
 
 export interface HistoryEntry {
   query: string;
-  /** Insertion counter (monotonic within the session) for stable ordering. */
-  seq: number;
 }
 
 const MAX_ENTRIES = 50;
@@ -12,7 +10,6 @@ const KEY_PREFIX = 'atlas.history.';
 @Injectable({ providedIn: 'root' })
 export class HistoryStore {
   private dbName = '';
-  private seq = 0;
   private readonly _entries = signal<HistoryEntry[]>([]);
   readonly entries = this._entries.asReadonly();
 
@@ -25,7 +22,7 @@ export class HistoryStore {
     const text = query.trim();
     if (!text) return;
     const without = this._entries().filter((e) => e.query !== text);
-    const next = [{ query: text, seq: ++this.seq }, ...without].slice(0, MAX_ENTRIES);
+    const next = [{ query: text }, ...without].slice(0, MAX_ENTRIES);
     this._entries.set(next);
     this.persist(next);
   }

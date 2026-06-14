@@ -395,3 +395,85 @@ button:disabled {
 .inspector-empty {
   color: var(--text-muted);
 }
+
+/* AQL console */
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.console-error {
+  background: var(--surface);
+  border: 1px solid #f87171;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: #f87171;
+}
+.console-error .caret {
+  margin-left: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.console-error .snippet {
+  margin: 0.4rem 0 0;
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+}
+
+.tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tab-bar button[role='tab'] {
+  background: none;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+}
+.tab-bar button[role='tab'][aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.tab-bar .explain-btn {
+  margin-left: auto;
+}
+
+.tab-panel {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.stats {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}
+
+/* History tab */
+.history-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.history-item {
+  width: 100%;
+  text-align: left;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  white-space: pre;
+  overflow-x: auto;
+}
+.history-item:hover {
+  border-color: var(--accent);
+}
