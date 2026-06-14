@@ -1,7 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { AtlasApi } from '../core/atlas-api';
+import { AuthService } from '../core/auth.service';
 
 @Component({
   selector: 'app-register',
@@ -9,7 +9,7 @@ import { AtlasApi } from '../core/atlas-api';
   templateUrl: './register.html',
 })
 export class Register {
-  private readonly api = inject(AtlasApi);
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
   readonly username = signal('');
@@ -25,8 +25,8 @@ export class Register {
     }
     this.busy.set(true);
     try {
-      await this.api.register(this.username(), this.password());
-      await this.api.login(this.username(), this.password());
+      await this.auth.register(this.username(), this.password());
+      await this.auth.login(this.username(), this.password());
       await this.router.navigateByUrl('/databases');
     } catch (err) {
       const status = (err as { status?: number }).status;

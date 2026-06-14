@@ -3,53 +3,58 @@ import { provideRouter, Router } from '@angular/router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AtlasApi } from '../core/atlas-api';
 import { AuthService } from '../core/auth.service';
-import { Login } from './login';
+import { Register } from './register';
 import type { UserInfo } from '@atlas/protocol';
 
 const ada: UserInfo = { username: 'ada', isAdmin: false };
 
-describe('Login component', () => {
+describe('Register component', () => {
   beforeEach(() => TestBed.resetTestingModule());
 
-  it('logs in through AuthService (sets the user signal) and navigates to the picker', async () => {
+  it('registers then logs in through AuthService and sets the user signal', async () => {
+    const register = vi.fn().mockResolvedValue(ada);
     const login = vi.fn().mockResolvedValue(ada);
     await TestBed.configureTestingModule({
-      imports: [Login],
+      imports: [Register],
       providers: [
         provideRouter([]),
-        { provide: AtlasApi, useValue: { login, whoami: vi.fn().mockResolvedValue(null) } },
+        {
+          provide: AtlasApi,
+          useValue: { register, login, whoami: vi.fn().mockResolvedValue(null) },
+        },
       ],
     }).compileComponents();
     const auth = TestBed.inject(AuthService);
     const router = TestBed.inject(Router);
     const navSpy = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
 
-    const fixture = TestBed.createComponent(Login);
+    const fixture = TestBed.createComponent(Register);
     const cmp = fixture.componentInstance;
     cmp.username.set('ada');
     cmp.password.set('secret12');
     await cmp.submit();
 
+    expect(register).toHaveBeenCalledWith('ada', 'secret12');
     expect(login).toHaveBeenCalledWith('ada', 'secret12');
-    expect(auth.user()).toEqual(ada); // signal set immediately, not only via the guard
+    expect(auth.user()).toEqual(ada);
     expect(navSpy).toHaveBeenCalledWith('/databases');
   });
 
-  it('shows an error message when login fails', async () => {
-    const login = vi.fn().mockRejectedValue(Object.assign(new Error('bad'), { status: 401 }));
+  it('rejects a short password before calling the API', async () => {
+    const register = vi.fn();
     await TestBed.configureTestingModule({
-      imports: [Login],
+      imports: [Register],
       providers: [
         provideRouter([]),
-        { provide: AtlasApi, useValue: { login, whoami: vi.fn().mockResolvedValue(null) } },
+        { provide: AtlasApi, useValue: { register, whoami: vi.fn().mockResolvedValue(null) } },
       ],
     }).compileComponents();
-    const fixture = TestBed.createComponent(Login);
+    const fixture = TestBed.createComponent(Register);
     const cmp = fixture.componentInstance;
-    cmp.username.set('x');
-    cmp.password.set('y');
+    cmp.username.set('ada');
+    cmp.password.set('short');
     await cmp.submit();
-    await fixture.whenStable();
-    expect(cmp.error()).toContain('Invalid');
+    expect(register).not.toHaveBeenCalled();
+    expect(cmp.error()).toContain('at least 8');
   });
 });
