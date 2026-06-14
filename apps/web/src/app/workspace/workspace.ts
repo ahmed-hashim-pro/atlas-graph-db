@@ -1,29 +1,37 @@
-import { AfterViewInit, Component, inject, viewChild } from '@angular/core';
+import { AfterViewInit, Component, inject, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import type { Subscription } from '@atlas/client';
 import type { WsFrame } from '@atlas/protocol';
 import type { Op } from '@atlas/core';
 import { OnDestroy } from '@angular/core';
 import { AtlasApi } from '../core/atlas-api';
+import { AlgorithmsView } from './algorithms-view';
+import { Console } from './console';
 import { GraphCanvas } from './graph-canvas';
 import { GraphStore } from './graph.store';
 import { GraphStoreWorkspaceAdapter } from './graph-store.adapter';
 import { Inspector } from './inspector';
 import { Legend } from './legend';
+import { SchemaView } from './schema-view';
 import { DEFAULT_EXPAND_CAP } from './graph-model';
 import { neighborQuery, parseGraphRows } from './expand';
 import { WORKSPACE_GRAPH_STORE } from './workspace-graph-store.contract';
+
+/** Which dock panel is open below the canvas. */
+export type WorkspaceDock = 'console' | 'schema' | 'algorithms' | null;
 
 /** Initial query: a capped sample of nodes with their edges to seed the canvas. */
 const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
 
 @Component({
   selector: 'app-workspace',
-  imports: [RouterLink, GraphCanvas, Inspector, Legend],
+  imports: [RouterLink, GraphCanvas, Inspector, Legend, Console, SchemaView, AlgorithmsView],
   templateUrl: './workspace.html',
   providers: [
     GraphStore, // a fresh store per open database
-    // The console's "project to canvas" targets this workspace's canvas store.
+    // The console's "project to canvas" and the algorithms view's
+    // "paint onto canvas" target this workspace's canvas store (not the
+    // app-wide in-memory default), so both reach the live renderer.
     { provide: WORKSPACE_GRAPH_STORE, useClass: GraphStoreWorkspaceAdapter },
   ],
 })
@@ -33,6 +41,13 @@ export class Workspace implements AfterViewInit, OnDestroy {
   readonly name = inject(ActivatedRoute).snapshot.paramMap.get('name') ?? '';
   private readonly canvas = viewChild.required(GraphCanvas);
   private sub: Subscription | null = null;
+
+  /** The dock panel open below the canvas; the console opens by default. */
+  readonly dock = signal<WorkspaceDock>('console');
+
+  toggleDock(panel: WorkspaceDock): void {
+    this.dock.update((d) => (d === panel ? null : panel));
+  }
 
   /** Resolves once the initial load completes — awaited by tests. */
   readonly ready: Promise<void> = this.load();
