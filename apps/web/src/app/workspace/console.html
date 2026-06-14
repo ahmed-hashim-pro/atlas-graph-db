@@ -36,6 +36,20 @@
       @case ('plan') {
         <app-explain-plan-view [rows]="store.plan()" />
       }
+      @case ('history') {
+        @if (history.entries().length === 0) {
+          <p class="empty">No queries yet.</p>
+        } @else {
+          <ul class="history-list">
+            @for (e of history.entries(); track e.seq) {
+              <li>
+                <button type="button" class="history-item" (click)="rerun(e.query)">{{ e.query }}</button>
+              </li>
+            }
+          </ul>
+          <button type="button" (click)="history.clear()">Clear history</button>
+        }
+      }
       @default {
         <p class="empty">Tab arrives in a later task.</p>
       }
