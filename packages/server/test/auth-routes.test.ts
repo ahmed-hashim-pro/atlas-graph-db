@@ -110,7 +110,10 @@ describe('auth routes', () => {
     const cookie = `atlas_session=${login.cookies.find((c) => c.name === 'atlas_session')!.value}`;
 
     // The fresh cookie works.
-    expect((await app.inject({ method: 'GET', url: '/api/auth/whoami', headers: { cookie } })).statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: '/api/auth/whoami', headers: { cookie } }))
+        .statusCode,
+    ).toBe(200);
 
     // Log out (server-side session deleted), then the SAME cookie value 401s.
     await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
