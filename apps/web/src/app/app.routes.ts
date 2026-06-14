@@ -16,5 +16,10 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./workspace/workspace').then((m) => m.Workspace),
   },
+  {
+    path: 'db/:name/schema',
+    canActivate: [authGuard],
+    loadComponent: () => import('./workspace/schema-view').then((m) => m.SchemaView),
+  },
   { path: '**', redirectTo: 'databases' },
 ];

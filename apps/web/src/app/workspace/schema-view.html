@@ -1,0 +1,28 @@
+<section class="schema-view" aria-label="Schema diagram">
+  <h1>Schema</h1>
+  @if (loading()) {
+    <p>Loading…</p>
+  } @else if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  } @else if (diagram().nodes.length === 0) {
+    <p class="empty">No labels yet — this database is empty.</p>
+  } @else {
+    <svg class="schema-svg" viewBox="0 0 900 600" role="img" aria-label="Labels and edge types">
+      @for (e of diagram().edges; track e.type) {
+        <g class="schema-edge">
+          <line [attr.x1]="e.fromX" [attr.y1]="e.fromY" [attr.x2]="e.toX" [attr.y2]="e.toY" />
+          <text [attr.x]="(e.fromX + e.toX) / 2" [attr.y]="(e.fromY + e.toY) / 2">
+            {{ e.type }} ({{ e.count }})
+          </text>
+        </g>
+      }
+      @for (node of diagram().nodes; track node.label) {
+        <g class="schema-node" [attr.transform]="'translate(' + node.x + ',' + node.y + ')'">
+          <rect x="-60" y="-22" width="120" height="44" rx="8" />
+          <text class="schema-label" text-anchor="middle" y="-2">{{ node.label }}</text>
+          <text class="schema-count" text-anchor="middle" y="14">{{ node.count }} nodes</text>
+        </g>
+      }
+    </svg>
+  }
+</section>
