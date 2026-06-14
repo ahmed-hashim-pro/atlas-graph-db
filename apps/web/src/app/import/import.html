@@ -1,0 +1,109 @@
+<section class="import">
+  <header class="import-head">
+    <h1>Import into {{ name || '(no database)' }}</h1>
+    @if (name) {
+      <a routerLink="/db/{{ name }}">Open workspace</a>
+    } @else {
+      <a routerLink="/databases">Choose a database</a>
+    }
+  </header>
+
+  <div class="import-modes" role="tablist" aria-label="Import format">
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="mode() === 'json'"
+      [class.active]="mode() === 'json'"
+      (click)="mode.set('json')"
+    >
+      JSON
+    </button>
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="mode() === 'csv'"
+      [class.active]="mode() === 'csv'"
+      (click)="mode.set('csv')"
+    >
+      CSV
+    </button>
+  </div>
+
+  @if (mode() === 'json') {
+    <label for="json-text">Paste JSON ({{ '{' }} nodes, edges {{ '}' }})</label>
+    <textarea
+      id="json-text"
+      rows="10"
+      [ngModel]="jsonText()"
+      (ngModelChange)="jsonText.set($event)"
+    ></textarea>
+    <label for="json-file" class="file-label">…or upload a .json file</label>
+    <input
+      id="json-file"
+      type="file"
+      accept=".json,application/json"
+      #jf
+      (change)="readFile('json', jf)"
+    />
+  } @else {
+    <label for="nodes-csv">nodes.csv</label>
+    <textarea
+      id="nodes-csv"
+      rows="6"
+      placeholder="tempId,:label,name:string"
+      [ngModel]="nodesCsv()"
+      (ngModelChange)="nodesCsv.set($event)"
+    ></textarea>
+    <input
+      id="nodes-file"
+      type="file"
+      accept=".csv,text/csv"
+      #nf
+      (change)="readFile('nodes', nf)"
+    />
+    <label for="edges-csv">edges.csv</label>
+    <textarea
+      id="edges-csv"
+      rows="6"
+      placeholder=":from,:to,:type"
+      [ngModel]="edgesCsv()"
+      (ngModelChange)="edgesCsv.set($event)"
+    ></textarea>
+    <input
+      id="edges-file"
+      type="file"
+      accept=".csv,text/csv"
+      #ef
+      (change)="readFile('edges', ef)"
+    />
+  }
+
+  <label class="atomic">
+    <input type="checkbox" [ngModel]="atomic()" (ngModelChange)="atomic.set($event)" />
+    Atomic (all-or-nothing)
+  </label>
+
+  <button type="button" (click)="submit()" [disabled]="store.busy() || !name">
+    {{ store.busy() ? 'Importing…' : 'Run import' }}
+  </button>
+
+  @if (store.error()) {
+    <p class="error" role="alert">{{ store.error() }}</p>
+  }
+
+  @if (store.result(); as r) {
+    <div class="import-result" aria-live="polite">
+      <p>
+        Committed <strong>{{ r.committed.nodes }}</strong> nodes and
+        <strong>{{ r.committed.edges }}</strong> edges. idMap: {{ idMapSize() }} entries.
+      </p>
+      @if (r.error) {
+        <p class="error">
+          First error at {{ r.error.at.kind }} #{{ r.error.at.index }}: {{ r.error.message }}
+        </p>
+      } @else {
+        <p class="ok">No errors.</p>
+      }
+    </div>
+  }
+</section>
