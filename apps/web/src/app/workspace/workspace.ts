@@ -17,6 +17,8 @@ import { SchemaView } from './schema-view';
 import { DEFAULT_EXPAND_CAP } from './graph-model';
 import { neighborQuery, parseGraphRows } from './expand';
 import { WORKSPACE_GRAPH_STORE } from './workspace-graph-store.contract';
+import { CommandPalette } from '../search/command-palette';
+import type { NodeHit } from '../search/node-search';
 
 /** Which dock panel is open below the canvas. */
 export type WorkspaceDock = 'console' | 'schema' | 'algorithms' | null;
@@ -26,7 +28,16 @@ const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
 
 @Component({
   selector: 'app-workspace',
-  imports: [RouterLink, GraphCanvas, Inspector, Legend, Console, SchemaView, AlgorithmsView],
+  imports: [
+    RouterLink,
+    GraphCanvas,
+    Inspector,
+    Legend,
+    Console,
+    SchemaView,
+    AlgorithmsView,
+    CommandPalette,
+  ],
   templateUrl: './workspace.html',
   providers: [
     GraphStore, // a fresh store per open database
@@ -54,6 +65,48 @@ export class Workspace implements AfterViewInit, OnDestroy {
 
   toggleDock(panel: WorkspaceDock): void {
     this.dock.update((d) => (d === panel ? null : panel));
+  }
+
+  /** Whether the ⌘K command palette overlay is open. */
+  readonly paletteOpen = signal(false);
+  private readonly palette = viewChild(CommandPalette);
+
+  /** ⌘/Ctrl+K toggles the palette; bound on the workspace host in the template. */
+  onHostKey(ev: KeyboardEvent): void {
+    if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'k' || ev.key === 'K')) {
+      ev.preventDefault();
+      this.paletteOpen.update((v) => !v);
+      if (this.paletteOpen()) queueMicrotask(() => this.palette()?.focusInput());
+    }
+  }
+
+  /** Open the palette from the topbar button and focus its input once mounted. */
+  openPalette(): void {
+    this.paletteOpen.set(true);
+    queueMicrotask(() => this.palette()?.focusInput());
+  }
+
+  closePalette(): void {
+    this.paletteOpen.set(false);
+  }
+
+  /**
+   * Bring a searched node onto the canvas: fetch it (with its immediate neighbors,
+   * reusing the expand query so the node is not stranded), merge into the store,
+   * select it, close the palette, and re-fit the camera so the node is centered.
+   */
+  async onPick(hit: NodeHit): Promise<void> {
+    this.paletteOpen.set(false);
+    const { query, params } = neighborQuery(hit.id);
+    try {
+      const res = await this.api.database(this.name).query(query, params);
+      this.store.addGraph(parseGraphRows(res));
+    } catch {
+      // If the node has no neighbors (or the expand query fails), still select it
+      // from whatever is already loaded so the inspector opens.
+    }
+    this.store.select({ kind: 'node', id: hit.id });
+    this.canvas().fit();
   }
 
   /** Resolves once the initial load completes — awaited by tests. */
