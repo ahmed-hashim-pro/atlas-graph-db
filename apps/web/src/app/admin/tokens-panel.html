@@ -1,0 +1,40 @@
+<section class="admin-panel">
+  <h2>API tokens</h2>
+  <p class="muted">Programmatic access tokens scoped to your account.</p>
+
+  <form class="create" (ngSubmit)="create()">
+    <label class="sr-only" for="token-name">New token name</label>
+    <input
+      id="token-name"
+      placeholder="token name (e.g. ci)"
+      [ngModel]="newName()"
+      (ngModelChange)="newName.set($event)"
+      name="token-name"
+    />
+    <button type="submit" [disabled]="!newName().trim()">Create token</button>
+  </form>
+
+  @if (store.lastSecret(); as secret) {
+    <div class="token-secret" role="alert">
+      <p>Copy this token now — it is shown only once:</p>
+      <code>{{ secret }}</code>
+      <button type="button" (click)="store.clearSecret()">Done</button>
+    </div>
+  }
+
+  @if (store.error()) {
+    <p class="error" role="alert">{{ store.error() }}</p>
+  }
+
+  <ul class="token-list">
+    @for (t of store.tokens(); track t.tokenId) {
+      <li class="token-row">
+        <span class="token-name">{{ t.name }}</span>
+        <code class="token-id">{{ t.tokenId }}</code>
+        <button type="button" (click)="store.revoke(t.tokenId)">Revoke</button>
+      </li>
+    } @empty {
+      <li class="muted">No tokens yet.</li>
+    }
+  </ul>
+</section>

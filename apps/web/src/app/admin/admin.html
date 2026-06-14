@@ -1,0 +1,32 @@
+<section class="admin">
+  <h1>Admin</h1>
+  <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="tab() === 'tokens'"
+      [class.active]="tab() === 'tokens'"
+      (click)="tab.set('tokens')"
+    >
+      Tokens
+    </button>
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="tab() === 'roles'"
+      [class.active]="tab() === 'roles'"
+      (click)="tab.set('roles')"
+    >
+      Roles
+    </button>
+  </nav>
+
+  @switch (tab()) {
+    @case ('tokens') {
+      <app-tokens-panel />
+    }
+    @case ('roles') {
+      <app-roles-panel />
+    }
+  }
+</section>

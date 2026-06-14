@@ -1,0 +1,56 @@
+<section class="admin-panel">
+  <h2>Database roles</h2>
+  <p class="muted">Grant or revoke roles on databases you own.</p>
+
+  <label for="role-db">Database</label>
+  <select id="role-db" [ngModel]="store.selected()" (ngModelChange)="store.select($event)">
+    <option value="" disabled>Choose a database…</option>
+    @for (db of store.ownedDatabases(); track db.name) {
+      <option [value]="db.name">{{ db.name }}</option>
+    }
+  </select>
+
+  @if (store.ownedDatabases().length === 0) {
+    <p class="muted">You do not own any databases.</p>
+  }
+
+  @if (store.selected()) {
+    <p class="owners">Owners: {{ store.owners().join(', ') || '—' }}</p>
+
+    <form class="grant" (ngSubmit)="grant()">
+      <label class="sr-only" for="grant-user">Username</label>
+      <input
+        id="grant-user"
+        placeholder="username"
+        [ngModel]="grantUser()"
+        (ngModelChange)="grantUser.set($event)"
+        name="grant-user"
+      />
+      <label class="sr-only" for="grant-role">Role</label>
+      <select
+        id="grant-role"
+        [ngModel]="grantRole()"
+        (ngModelChange)="grantRole.set($event)"
+        name="grant-role"
+      >
+        @for (r of roles; track r) {
+          <option [value]="r">{{ r }}</option>
+        }
+      </select>
+      <button type="submit" [disabled]="!grantUser().trim()">Grant</button>
+    </form>
+
+    <ul class="owner-list">
+      @for (owner of store.owners(); track owner) {
+        <li class="owner-row">
+          <span>{{ owner }} <span class="role role-owner">owner</span></span>
+          <button type="button" (click)="store.revoke(owner)">Revoke</button>
+        </li>
+      }
+    </ul>
+  }
+
+  @if (store.error()) {
+    <p class="error" role="alert">{{ store.error() }}</p>
+  }
+</section>
