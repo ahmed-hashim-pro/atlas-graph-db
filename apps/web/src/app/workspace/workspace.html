@@ -1,4 +1,4 @@
-<div class="workspace">
+<div class="workspace" tabindex="0" (keydown)="onHostKey($event)">
   <header class="ws-topbar">
     <a routerLink="/databases" class="ws-back">← Databases</a>
     <h1 class="ws-title">{{ name }}</h1>
@@ -28,6 +28,14 @@
         Algorithms
       </button>
     </nav>
+    <button
+      type="button"
+      class="ws-search"
+      (click)="openPalette()"
+      aria-keyshortcuts="Meta+K Control+K"
+    >
+      Search nodes <kbd>⌘K</kbd>
+    </button>
     <span class="ws-stats">{{ store.shownCount() }} / {{ store.totalNodeCount() }} nodes</span>
   </header>
   <div class="ws-body">
@@ -49,5 +57,12 @@
         }
       }
     </div>
+  }
+  @if (paletteOpen()) {
+    <app-command-palette
+      [database]="name"
+      (pick)="onPick($event)"
+      (closed)="closePalette()"
+    />
   }
 </div>

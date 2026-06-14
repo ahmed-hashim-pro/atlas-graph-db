@@ -76,4 +76,28 @@ describe('Workspace page', () => {
     ).toEqual(['1', '2']);
     expect(cmp.store.visibleEdges().map((e) => e.id)).toEqual(['e']);
   });
+
+  it('⌘K toggles the command palette open', async () => {
+    const query = vi.fn().mockResolvedValue(initial);
+    const schemaFn = vi.fn().mockResolvedValue(schema);
+    const { fixture } = setup(query, schemaFn);
+    fixture.detectChanges();
+    await fixture.componentInstance.ready;
+    expect(fixture.componentInstance.paletteOpen()).toBe(false);
+    fixture.componentInstance.onHostKey(
+      new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
+    );
+    expect(fixture.componentInstance.paletteOpen()).toBe(true);
+  });
+
+  it('picking a search hit adds it to the store and selects it', async () => {
+    const query = vi.fn().mockResolvedValue(initial);
+    const schemaFn = vi.fn().mockResolvedValue(schema);
+    const { fixture } = setup(query, schemaFn);
+    fixture.detectChanges();
+    await fixture.componentInstance.ready;
+    await fixture.whenStable();
+    await fixture.componentInstance.onPick({ id: '1', labels: ['Person'], label: 'Ada' });
+    expect(fixture.componentInstance.store.selection()).toEqual({ kind: 'node', id: '1' });
+  });
 });

@@ -1,0 +1,46 @@
+<div class="palette-backdrop" (click)="closed.emit()"></div>
+<div
+  class="palette"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Search nodes"
+  (keydown)="onKey($event)"
+>
+  <label class="sr-only" for="palette-box">Search nodes</label>
+  <input
+    #box
+    id="palette-box"
+    type="search"
+    placeholder="Search nodes by name…"
+    autocomplete="off"
+    role="combobox"
+    aria-expanded="true"
+    aria-controls="palette-list"
+    [attr.aria-activedescendant]="hits().length ? 'hit-' + active() : null"
+    [ngModel]="term()"
+    (ngModelChange)="term.set($event)"
+    (input)="search()"
+  />
+  @if (busy()) {
+    <p class="palette-status">Searching…</p>
+  }
+  <ul id="palette-list" class="palette-list" role="listbox" aria-label="Search results">
+    @for (hit of hits(); track hit.id; let i = $index) {
+      <li
+        [id]="'hit-' + i"
+        class="palette-hit"
+        role="option"
+        [attr.aria-selected]="i === active()"
+        [class.active]="i === active()"
+        (click)="choose(hit)"
+      >
+        <span class="hit-label">{{ hit.label }}</span>
+        <span class="hit-labels">{{ hit.labels.join(', ') }}</span>
+      </li>
+    } @empty {
+      @if (term().trim() && !busy()) {
+        <li class="palette-empty">No matches.</li>
+      }
+    }
+  </ul>
+</div>
