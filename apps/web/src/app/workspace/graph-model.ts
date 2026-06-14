@@ -6,6 +6,17 @@ export interface GraphNode {
   x?: number;
   y?: number;
   pinned?: boolean;
+  /**
+   * Optional per-node algorithm-paint overrides (§7.2 / Task 8). When present they
+   * style the canvas without disturbing the label-derived defaults:
+   * - `size` overrides the draw radius (e.g. PageRank/degree score → larger node);
+   * - `color` overrides the fill (e.g. Louvain community → palette color);
+   * - `highlighted` draws an accent emphasis ring (e.g. shortest-path/cycle members).
+   * Cleared by `GraphStore.clearAlgorithmPaint`.
+   */
+  size?: number;
+  color?: string;
+  highlighted?: boolean;
 }
 
 export interface GraphEdge {

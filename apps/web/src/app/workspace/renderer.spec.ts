@@ -115,4 +115,58 @@ describe('drawGraph', () => {
     drawGraph(ctx, scene({ nodes: [{ id: 'z', labels: ['Person'], props: {} }], edges: [] }));
     expect(calls.filter((c) => c.startsWith('arc(')).length).toBe(0);
   });
+
+  it('honors a per-node algorithm size override (radius scales with score)', () => {
+    const { ctx, calls } = stubCtx();
+    drawGraph(
+      ctx,
+      scene({
+        nodes: [{ id: 'a', labels: ['Person'], props: {}, x: 10, y: 10, size: 18 }],
+        edges: [],
+      }),
+    );
+    // The node circle uses the overridden radius (18), not the default NODE_RADIUS (7).
+    const nodeArc = calls.find((c) => c.startsWith('arc(') && c.includes(',18,'));
+    expect(nodeArc).toBeDefined();
+  });
+
+  it('honors a per-node algorithm color override (community fill)', () => {
+    const colorOf = makeColorOf(theme.nodePalette);
+    const { ctx } = stubCtx();
+    const fills: string[] = [];
+    const orig = Object.getOwnPropertyDescriptor(ctx, 'fillStyle');
+    Object.defineProperty(ctx, 'fillStyle', {
+      set: (v: string) => fills.push(v),
+      get: () => orig?.value as string,
+    });
+    drawGraph(
+      ctx,
+      scene({
+        colorOf,
+        nodes: [{ id: 'a', labels: ['Person'], props: {}, x: 10, y: 10, color: '#abcdef' }],
+        edges: [],
+      }),
+    );
+    expect(fills).toContain('#abcdef');
+  });
+
+  it('draws an emphasis ring (accent stroke) around highlighted nodes', () => {
+    const { ctx, calls } = stubCtx();
+    const strokes: string[] = [];
+    const orig = Object.getOwnPropertyDescriptor(ctx, 'strokeStyle');
+    Object.defineProperty(ctx, 'strokeStyle', {
+      set: (v: string) => strokes.push(v),
+      get: () => orig?.value as string,
+    });
+    drawGraph(
+      ctx,
+      scene({
+        selection: null,
+        nodes: [{ id: 'a', labels: ['Person'], props: {}, x: 10, y: 10, highlighted: true }],
+        edges: [],
+      }),
+    );
+    expect(strokes).toContain(theme.accent);
+    expect(calls.filter((c) => c === 'stroke').length).toBeGreaterThan(0);
+  });
 });

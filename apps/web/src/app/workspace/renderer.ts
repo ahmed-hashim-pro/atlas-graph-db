@@ -31,17 +31,27 @@ export function drawGraph(ctx: CanvasRenderingContext2D, scene: Scene): void {
   }
 
   // Nodes.
-  const r = NODE_RADIUS;
   for (const n of nodes) {
     if (n.x == null || n.y == null) continue;
     const s = worldToScreen({ x: n.x, y: n.y }, vp);
+    // Algorithm paint (Task 8): `size` overrides the radius, `color` the fill,
+    // `highlighted` adds an accent emphasis ring (e.g. shortest-path members).
+    const r = n.size != null && n.size > 0 ? n.size : NODE_RADIUS;
     ctx.beginPath();
-    ctx.fillStyle = colorOf(n.labels);
+    ctx.fillStyle = n.color ?? colorOf(n.labels);
     ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
     ctx.fill();
     if (n.pinned) {
       ctx.strokeStyle = theme.textMuted;
       ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // Algorithm path/cycle emphasis ring.
+    if (n.highlighted) {
+      ctx.strokeStyle = theme.accent;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, r + 2, 0, Math.PI * 2);
       ctx.stroke();
     }
     // Selection highlight.

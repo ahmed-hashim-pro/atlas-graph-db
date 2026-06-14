@@ -163,4 +163,48 @@ describe('GraphStore', () => {
     expect(store.visibleEdges()).toEqual([]);
     expect(store.selection()).toBeNull();
   });
+
+  it('applyAlgorithmPaint maps score→size, community→color, and paths→highlighted onto the displayed nodes', () => {
+    const store = make();
+    store.addGraph({
+      nodes: [node('1'), node('2'), node('3')],
+      edges: [edge('a', '1', '2'), edge('b', '2', '3')],
+    });
+    store.applyAlgorithmPaint({
+      scores: new Map([
+        [1, 0.2],
+        [2, 1],
+      ]),
+      communities: new Map([[3, 5]]),
+      paths: [[1, 2, 3]],
+    });
+    const byId = new Map(store.visibleNodes().map((n) => [n.id, n]));
+    // A higher score yields a larger size override.
+    expect(byId.get('2')!.size!).toBeGreaterThan(byId.get('1')!.size!);
+    // Community membership assigns a color.
+    expect(typeof byId.get('3')!.color).toBe('string');
+    // Every node on a path is highlighted.
+    expect(byId.get('1')!.highlighted).toBe(true);
+    expect(byId.get('2')!.highlighted).toBe(true);
+    expect(byId.get('3')!.highlighted).toBe(true);
+  });
+
+  it('clearAlgorithmPaint removes all per-node size/color/highlight overrides', () => {
+    const store = make();
+    store.addGraph({ nodes: [node('1'), node('2')], edges: [] });
+    store.applyAlgorithmPaint({
+      scores: new Map([
+        [1, 0.5],
+        [2, 0.9],
+      ]),
+      communities: new Map(),
+      paths: [],
+    });
+    store.clearAlgorithmPaint();
+    for (const n of store.visibleNodes()) {
+      expect(n.size).toBeUndefined();
+      expect(n.color).toBeUndefined();
+      expect(n.highlighted).toBeUndefined();
+    }
+  });
 });

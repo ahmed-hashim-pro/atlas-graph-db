@@ -5,11 +5,19 @@ import {
   capNodes,
   DEFAULT_RENDER_CAP,
   mergeGraph,
+  NODE_RADIUS,
   type GraphData,
   type GraphEdge,
   type GraphNode,
   type Selection,
 } from './graph-model';
+import type { AlgorithmPaint } from './workspace-graph-store.contract';
+
+/** Algorithm-paint palette for community/component coloring (mirrors the theme node palette). */
+const PAINT_PALETTE = ['#6366f1', '#22d3ee', '#a855f7', '#f472b6', '#34d399', '#fbbf24'];
+/** Radius bounds for score→size mapping (CSS px); the smallest score keeps the default radius. */
+const PAINT_MIN_RADIUS = NODE_RADIUS;
+const PAINT_MAX_RADIUS = NODE_RADIUS * 3;
 
 export interface LabelEntry {
   label: string;
@@ -183,6 +191,53 @@ export class GraphStore {
     this._selection.set(selection);
   }
 
+  /**
+   * Apply algorithm output styling to the displayed nodes (§7.2 / Task 8): map
+   * `scores` → node `size` (normalized into [PAINT_MIN_RADIUS, PAINT_MAX_RADIUS]),
+   * `communities`/components → `color` (a palette bucket per community id), and
+   * every node on a `paths` entry → `highlighted`. Node ids in the paint maps are
+   * numeric (algorithm output); the store keys nodes by stringified id. Overrides
+   * are stamped onto the node objects so they flow through to the renderer Scene.
+   * Replaces any previous paint (clears first) so re-running an algorithm is clean.
+   */
+  applyAlgorithmPaint(paint: AlgorithmPaint): void {
+    const sizeOf = makeSizeMapper(paint.scores);
+    const highlighted = new Set<string>();
+    for (const path of paint.paths) for (const id of path) highlighted.add(String(id));
+
+    this._data.update((d) => ({
+      ...d,
+      nodes: d.nodes.map((n) => {
+        const next: GraphNode = { ...n };
+        delete next.size;
+        delete next.color;
+        delete next.highlighted;
+        const numId = Number(n.id);
+        const score = paint.scores.get(numId);
+        if (score !== undefined) next.size = sizeOf(score);
+        const community = paint.communities.get(numId);
+        if (community !== undefined)
+          next.color = PAINT_PALETTE[Math.abs(community) % PAINT_PALETTE.length];
+        if (highlighted.has(n.id)) next.highlighted = true;
+        return next;
+      }),
+    }));
+  }
+
+  /** Remove all per-node algorithm-paint overrides (size/color/highlight). */
+  clearAlgorithmPaint(): void {
+    this._data.update((d) => ({
+      ...d,
+      nodes: d.nodes.map((n) => {
+        const next: GraphNode = { ...n };
+        delete next.size;
+        delete next.color;
+        delete next.highlighted;
+        return next;
+      }),
+    }));
+  }
+
   connectionsOf(nodeId: string): Connection[] {
     const out: Connection[] = [];
     for (const e of this._data().edges) {
@@ -225,4 +280,24 @@ export class GraphStore {
       if (!seenTypes.has(type)) types.push({ type, count, visible: true });
     this._edgeTypes.set(types);
   }
+}
+
+/**
+ * Build a score→radius mapper that linearly maps the observed score range onto
+ * [PAINT_MIN_RADIUS, PAINT_MAX_RADIUS]. When all scores are equal (or there is a
+ * single score), every node gets the max radius so the paint is still visible.
+ */
+function makeSizeMapper(scores: Map<number, number>): (score: number) => number {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const v of scores.values()) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const span = max - min;
+  return (score: number): number => {
+    if (!Number.isFinite(span) || span <= 0) return PAINT_MAX_RADIUS;
+    const t = (score - min) / span;
+    return PAINT_MIN_RADIUS + t * (PAINT_MAX_RADIUS - PAINT_MIN_RADIUS);
+  };
 }
