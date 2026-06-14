@@ -1,0 +1,40 @@
+<section class="console" aria-label="AQL console">
+  <app-aql-editor
+    [value]="'MATCH (n) RETURN n LIMIT 25'"
+    [completionSource]="completionSource"
+    (run)="run($event)"
+  />
+
+  @if (store.error(); as err) {
+    <div class="console-error" role="alert">
+      <strong>{{ err.code }}</strong>
+      @if (err.line) {
+        <span class="caret">line {{ err.line }}:{{ err.column }}</span>
+      }
+      <p>{{ err.message }}</p>
+      @if (err.snippet) {
+        <pre class="snippet">{{ err.snippet }}</pre>
+      }
+    </div>
+  }
+
+  <nav class="tab-bar" role="tablist" aria-label="Console tabs">
+    <button role="tab" [attr.aria-selected]="store.tab() === 'results'" (click)="store.setTab('results')">Results</button>
+    <button role="tab" [attr.aria-selected]="store.tab() === 'plan'" (click)="store.setTab('plan')">EXPLAIN Plan</button>
+    <button role="tab" [attr.aria-selected]="store.tab() === 'history'" (click)="store.setTab('history')">History</button>
+  </nav>
+
+  <div class="tab-panel" role="tabpanel">
+    @switch (store.tab()) {
+      @case ('results') {
+        @if (store.stats(); as s) {
+          <p class="stats">{{ store.rows().length }} rows · {{ s.elapsedMs }} ms</p>
+        }
+        <app-results-table [columns]="store.columns()" [rows]="store.rows()" />
+      }
+      @default {
+        <p class="empty">Tab arrives in a later task.</p>
+      }
+    }
+  </div>
+</section>

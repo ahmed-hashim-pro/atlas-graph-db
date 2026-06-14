@@ -1,0 +1,24 @@
+@if (rows().length === 0) {
+  <p class="empty">No rows.</p>
+} @else {
+  <div class="results-scroll" role="region" aria-label="Query results">
+    <table class="results-table">
+      <thead>
+        <tr>
+          @for (col of columns(); track col) {
+            <th scope="col">{{ col }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of rows(); track $index) {
+          <tr>
+            @for (cell of row; track $index) {
+              <td>{{ fmt(cell) }}</td>
+            }
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
