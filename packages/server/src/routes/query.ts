@@ -25,17 +25,33 @@ export async function registerQueryRoutes(app: FastifyInstance, ctx: AppContext)
   app.post('/api/db/:name/query', auth, async (req) => {
     const name = dbNameSchema.parse((req.params as { name: string }).name);
     const body = QueryReq.parse(req.body);
-    const cap = capabilityFor(body.query);
+    // capabilityFor parses the query; a parse error here is a query failure, so it
+    // is metered below. Compute the capability eagerly to gate authorization, but
+    // re-throw inside the metered block if parsing failed.
+    let cap: Capability;
+    try {
+      cap = capabilityFor(body.query);
+    } catch (parseErr) {
+      ctx.metrics.queriesTotal.inc();
+      ctx.metrics.queryErrorsTotal.inc();
+      throw parseErr; // AqlError → 400 via the error handler
+    }
     await requireCapability(ctx.catalog, req.principal!, name, cap);
     const db = await ctx.manager.get(name);
-    const result = await executeQuery(db, body.query, {
-      params: body.params,
-      timeoutMs: ctx.config.queryTimeoutMs,
-      maxRows: ctx.config.maxRows,
-    });
-    ctx.metrics.queriesTotal.inc();
-    ctx.metrics.queryLatencyMs.observe(result.stats.elapsedMs);
-    return result;
+    let ok = false;
+    try {
+      const result = await executeQuery(db, body.query, {
+        params: body.params,
+        timeoutMs: ctx.config.queryTimeoutMs,
+        maxRows: ctx.config.maxRows,
+      });
+      ok = true;
+      ctx.metrics.queryLatencyMs.observe(result.stats.elapsedMs);
+      return result;
+    } finally {
+      ctx.metrics.queriesTotal.inc();
+      if (!ok) ctx.metrics.queryErrorsTotal.inc();
+    }
   });
 
   app.get('/api/db/:name/schema', auth, async (req) => {

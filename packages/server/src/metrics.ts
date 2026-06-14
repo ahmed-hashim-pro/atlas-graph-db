@@ -48,6 +48,7 @@ class Histogram {
 
 export class MetricsRegistry {
   readonly queriesTotal = new Counter();
+  readonly queryErrorsTotal = new Counter();
   readonly wsSubscribers = new Gauge();
   readonly queryLatencyMs = new Histogram();
 
@@ -55,6 +56,8 @@ export class MetricsRegistry {
     return [
       '# TYPE atlas_queries_total counter',
       `atlas_queries_total ${this.queriesTotal.get()}`,
+      '# TYPE atlas_query_errors_total counter',
+      `atlas_query_errors_total ${this.queryErrorsTotal.get()}`,
       '# TYPE atlas_ws_subscribers gauge',
       `atlas_ws_subscribers ${this.wsSubscribers.get()}`,
       '# TYPE atlas_query_latency_ms histogram',

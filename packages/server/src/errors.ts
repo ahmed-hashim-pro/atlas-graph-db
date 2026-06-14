@@ -7,6 +7,7 @@ const ENGINE_STATUS: Record<string, number> = {
   VALIDATION: 400,
   NOT_FOUND: 404,
   CONSTRAINT_VIOLATION: 409,
+  DETACH_REQUIRED: 409,
   TIMEOUT: 504,
   WAL_CORRUPT: 500,
   WAL_CORRUPT_TAIL: 500,
@@ -68,7 +69,7 @@ export function toProblem(err: unknown): { status: number; body: ProblemDetails 
       status,
       body: {
         type: 'about:blank',
-        title: 'Engine Error',
+        title: httpTitle(status),
         status,
         detail: err.message,
         code: err.code,

@@ -2,6 +2,8 @@ export type AtlasErrorCode =
   | 'VALIDATION'
   | 'NOT_FOUND'
   | 'CONSTRAINT_VIOLATION'
+  /** A node still has incident edges; deletion needs { detach: true }. */
+  | 'DETACH_REQUIRED'
   | 'TIMEOUT'
   /**
    * Reserved: torn tail of the final WAL segment. Recovery currently
