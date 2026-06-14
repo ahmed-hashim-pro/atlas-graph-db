@@ -14,9 +14,11 @@ test('import data, then find a node with ⌘K and center it on the canvas', asyn
   await page.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByText('m6d-kb')).toBeVisible();
 
-  // Import a tiny JSON graph via the Import page.
-  await page.getByRole('link', { name: 'Import' }).first().click();
-  await expect(page).toHaveURL(/\/databases\/import/);
+  // Import a tiny JSON graph via the Import page. Use the picker's per-db Import
+  // link (it carries `?db=`, which the import page needs to enable submit) rather
+  // than the nav link, which targets no database.
+  await page.locator('.db-import').first().click();
+  await expect(page).toHaveURL(/\/databases\/import\?db=m6d-kb/);
   await page.getByLabel(/Paste JSON/).fill(
     JSON.stringify({
       nodes: [
