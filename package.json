@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
-    "e2e:web": "pnpm -F web e2e"
+    "e2e:web": "pnpm -F web e2e",
+    "verify:dist": "node scripts/verify-dist.mjs"
   },
   "devDependencies": {
     "@types/node": "^24",

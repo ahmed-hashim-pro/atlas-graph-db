@@ -1,11 +1,7 @@
 node_modules
 **/node_modules
 **/dist
-**/*.tsbuildinfo
-.env
-*.log
-.idea
+apps/web/dist
+apps/web/.angular
 .git
-docs
-.superpowers
-data
+*.log
