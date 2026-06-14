@@ -4,18 +4,28 @@ import { DEFAULT_EXPAND_CAP } from './graph-model';
 import type { QueryResponse } from '@atlas/protocol';
 
 describe('neighborQuery', () => {
-  it('builds a parameterized AQL string with cap + skip params', () => {
+  it('builds a parameterized AQL string and coerces the id to a number', () => {
+    // Engine node ids are numeric and `id(n) = $id` is type-strict, so the id
+    // MUST be bound as a number — a string id matches nothing (see the
+    // integration test below for the engine-level proof).
     const { query, params } = neighborQuery('42', 50, 100);
     expect(query).toContain('MATCH');
     expect(query).toContain('$id');
     expect(query).toContain('LIMIT');
     expect(query).toContain('SKIP');
-    expect(params).toEqual({ id: '42', limit: 50, skip: 100 });
+    expect(params).toEqual({ id: 42, limit: 50, skip: 100 });
+    expect(typeof params['id']).toBe('number');
   });
 
-  it('defaults the cap to DEFAULT_EXPAND_CAP and skip to 0', () => {
+  it('defaults the cap to DEFAULT_EXPAND_CAP and skip to 0 (numeric id)', () => {
     const { params } = neighborQuery('7');
-    expect(params).toEqual({ id: '7', limit: DEFAULT_EXPAND_CAP, skip: 0 });
+    expect(params).toEqual({ id: 7, limit: DEFAULT_EXPAND_CAP, skip: 0 });
+  });
+
+  it('throws on a non-integer id rather than building a query that matches nothing', () => {
+    expect(() => neighborQuery('not-a-number')).toThrow(/integer/);
+    expect(() => neighborQuery('1.5')).toThrow(/integer/);
+    expect(() => neighborQuery('')).toThrow(/integer/);
   });
 });
 
@@ -66,5 +76,23 @@ describe('parseGraphRows', () => {
   it('ignores non-graph scalar rows without throwing', () => {
     const res: QueryResponse = { columns: ['c'], rows: [[5]], stats: { rowsExamined: 1, elapsedMs: 0 } };
     expect(parseGraphRows(res)).toEqual({ nodes: [], edges: [] });
+  });
+
+  it('skips a malformed edge with an undefined endpoint instead of coercing to "undefined"', () => {
+    const res: QueryResponse = {
+      columns: ['n', 'r', 'm'],
+      rows: [
+        [
+          { id: 1, labels: ['Person'], props: {} },
+          // malformed: from present-but-undefined — must NOT become from: 'undefined'
+          { id: 'bad', type: 'KNOWS', from: undefined, to: 2, props: {} },
+          { id: 2, labels: ['Person'], props: {} },
+        ],
+      ],
+      stats: { rowsExamined: 1, elapsedMs: 0 },
+    };
+    const data = parseGraphRows(res);
+    expect(data.nodes.map((n) => n.id).sort()).toEqual(['1', '2']);
+    expect(data.edges).toEqual([]);
   });
 });
