@@ -11,7 +11,12 @@ const CHILD_KEYS = ['child', 'left', 'right'] as const;
 const ARRAY_CHILD_KEYS = ['steps'] as const;
 
 function isPlanNode(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v) && typeof (v as { op?: unknown }).op === 'string';
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    !Array.isArray(v) &&
+    typeof (v as { op?: unknown }).op === 'string'
+  );
 }
 
 /** Render the non-structural scalar fields of a plan node as `key=value` pairs. */

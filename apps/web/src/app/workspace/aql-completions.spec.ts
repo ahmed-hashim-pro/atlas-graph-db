@@ -4,7 +4,14 @@ import type { SchemaSummary } from '@atlas/core';
 
 const schema: SchemaSummary = {
   labels: [
-    { label: 'Person', count: 3, properties: [{ property: 'name', types: { string: 3 } }, { property: 'born', types: { number: 3 } }] },
+    {
+      label: 'Person',
+      count: 3,
+      properties: [
+        { property: 'name', types: { string: 3 } },
+        { property: 'born', types: { number: 3 } },
+      ],
+    },
     { label: 'Concept', count: 2, properties: [{ property: 'title', types: { string: 2 } }] },
   ],
   edgeTypes: [
@@ -36,7 +43,9 @@ describe('computeCompletions', () => {
 
   it('after CALL offers algo.* procedures', () => {
     const got = labels('CALL algo.');
-    expect(got).toEqual(expect.arrayContaining(['algo.pagerank', 'algo.louvain', 'algo.shortestPath']));
+    expect(got).toEqual(
+      expect.arrayContaining(['algo.pagerank', 'algo.louvain', 'algo.shortestPath']),
+    );
   });
 
   it('at a bare word boundary offers keywords (and filters by prefix)', () => {

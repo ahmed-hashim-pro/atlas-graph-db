@@ -19,9 +19,23 @@
   }
 
   <nav class="tab-bar" role="tablist" aria-label="Console tabs">
-    <button role="tab" [attr.aria-selected]="store.tab() === 'results'" (click)="store.setTab('results')">Results</button>
-    <button role="tab" [attr.aria-selected]="store.tab() === 'plan'" (click)="store.setTab('plan')">EXPLAIN Plan</button>
-    <button role="tab" [attr.aria-selected]="store.tab() === 'history'" (click)="store.setTab('history')">History</button>
+    <button
+      role="tab"
+      [attr.aria-selected]="store.tab() === 'results'"
+      (click)="store.setTab('results')"
+    >
+      Results
+    </button>
+    <button role="tab" [attr.aria-selected]="store.tab() === 'plan'" (click)="store.setTab('plan')">
+      EXPLAIN Plan
+    </button>
+    <button
+      role="tab"
+      [attr.aria-selected]="store.tab() === 'history'"
+      (click)="store.setTab('history')"
+    >
+      History
+    </button>
     <button class="explain-btn" (click)="explain()">EXPLAIN</button>
   </nav>
 
@@ -48,7 +62,9 @@
           <ul class="history-list">
             @for (e of history.entries(); track e.query) {
               <li>
-                <button type="button" class="history-item" (click)="rerun(e.query)">{{ e.query }}</button>
+                <button type="button" class="history-item" (click)="rerun(e.query)">
+                  {{ e.query }}
+                </button>
               </li>
             }
           </ul>

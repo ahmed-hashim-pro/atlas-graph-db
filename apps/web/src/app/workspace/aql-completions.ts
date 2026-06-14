@@ -1,12 +1,25 @@
-import type { Completion, CompletionContext, CompletionResult, CompletionSource } from '@codemirror/autocomplete';
+import type {
+  Completion,
+  CompletionContext,
+  CompletionResult,
+  CompletionSource,
+} from '@codemirror/autocomplete';
 import type { SchemaSummary } from '@atlas/core';
 import { AQL_FUNCTIONS, AQL_KEYWORDS } from './aql-language';
 
 /** §5.2 algorithm procedures offered after `CALL` / `algo.`. */
 export const ALGO_PROCEDURES: readonly string[] = [
-  'algo.shortestPath', 'algo.allShortestPaths', 'algo.pagerank', 'algo.louvain',
-  'algo.components', 'algo.degree', 'algo.betweenness', 'algo.bfs', 'algo.dfs',
-  'algo.topoSort', 'algo.cycles',
+  'algo.shortestPath',
+  'algo.allShortestPaths',
+  'algo.pagerank',
+  'algo.louvain',
+  'algo.components',
+  'algo.degree',
+  'algo.betweenness',
+  'algo.bfs',
+  'algo.dfs',
+  'algo.topoSort',
+  'algo.cycles',
 ];
 
 export interface AqlCompletion {
@@ -28,7 +41,11 @@ function allProperties(schema: SchemaSummary): string[] {
  * offset, return context-appropriate completions. Exported for unit tests; the
  * CodeMirror source adapter (below) calls this.
  */
-export function computeCompletions(schema: SchemaSummary, source: string, cursor: number): AqlCompletion[] {
+export function computeCompletions(
+  schema: SchemaSummary,
+  source: string,
+  cursor: number,
+): AqlCompletion[] {
   const before = source.slice(0, cursor);
 
   // `[:` or `[: PARTIAL` → edge types.
@@ -53,7 +70,9 @@ export function computeCompletions(schema: SchemaSummary, source: string, cursor
   const algoMatch = /algo\.([A-Za-z]*)$/.exec(before);
   if (algoMatch) {
     const prefix = algoMatch[1]!.toLowerCase();
-    return ALGO_PROCEDURES.filter((p) => p.slice('algo.'.length).toLowerCase().startsWith(prefix)).map((p) => ({
+    return ALGO_PROCEDURES.filter((p) =>
+      p.slice('algo.'.length).toLowerCase().startsWith(prefix),
+    ).map((p) => ({
       label: p,
       type: 'procedure' as const,
       apply: p,
@@ -88,10 +107,14 @@ export function makeAqlCompletionSource(getSchema: () => SchemaSummary | null): 
     const items = computeCompletions(schema, ctx.state.doc.toString(), ctx.pos);
     if (items.length === 0) return null;
     // Where does the replaced token start? Match the trailing token CodeMirror sees.
-    const word = ctx.matchBefore(/[:.\[A-Za-z0-9_]*$/);
+    const word = ctx.matchBefore(/[:.[A-Za-z0-9_]*$/);
     const from = word ? word.from : ctx.pos;
-    const options: Completion[] = items.map((c) => ({ label: c.label, type: cmType(c.type), apply: c.apply }));
-    return { from, options, validFor: /[:.\[A-Za-z0-9_]*$/ };
+    const options: Completion[] = items.map((c) => ({
+      label: c.label,
+      type: cmType(c.type),
+      apply: c.apply,
+    }));
+    return { from, options, validFor: /[:.[A-Za-z0-9_]*$/ };
   };
 }
 

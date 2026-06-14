@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AtlasApi } from '../core/atlas-api';
 import { ConsoleStore } from './console.store';
 import type { QueryResponse } from '@atlas/protocol';
-import { WORKSPACE_GRAPH_STORE, InMemoryWorkspaceGraphStore } from './workspace-graph-store.contract';
+import {
+  WORKSPACE_GRAPH_STORE,
+  InMemoryWorkspaceGraphStore,
+} from './workspace-graph-store.contract';
 
 const okResult: QueryResponse = {
   columns: ['name'],
@@ -38,11 +41,22 @@ describe('ConsoleStore', () => {
     const err = Object.assign(new Error('unexpected token'), {
       status: 400,
       code: 'PARSE_ERROR',
-      problem: { code: 'PARSE_ERROR', line: 1, column: 7, snippet: 'MATCH x\n      ^', detail: 'unexpected token' },
+      problem: {
+        code: 'PARSE_ERROR',
+        line: 1,
+        column: 7,
+        snippet: 'MATCH x\n      ^',
+        detail: 'unexpected token',
+      },
     });
     const store = withDb(vi.fn().mockRejectedValue(err));
     await store.run('MATCH x');
-    expect(store.error()).toMatchObject({ code: 'PARSE_ERROR', line: 1, column: 7, message: 'unexpected token' });
+    expect(store.error()).toMatchObject({
+      code: 'PARSE_ERROR',
+      line: 1,
+      column: 7,
+      message: 'unexpected token',
+    });
     expect(store.error()?.snippet).toContain('^');
     expect(store.rows()).toEqual([]);
   });

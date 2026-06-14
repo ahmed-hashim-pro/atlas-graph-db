@@ -32,7 +32,11 @@ describe('InMemoryWorkspaceGraphStore (the test fake implementing the contract)'
     const mem = store as InMemoryWorkspaceGraphStore;
     expect(mem.nodes.map((n) => n.id)).toEqual([1]);
 
-    store.paintAlgorithmResult({ scores: new Map([[1, 0.5]]), communities: new Map([[1, 0]]), paths: [] });
+    store.paintAlgorithmResult({
+      scores: new Map([[1, 0.5]]),
+      communities: new Map([[1, 0]]),
+      paths: [],
+    });
     expect(mem.lastPaint?.scores.get(1)).toBe(0.5);
   });
 });

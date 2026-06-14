@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 
-test('open the workspace console, run a query, see results; open the schema view', async ({ page }) => {
+test('open the workspace console, run a query, see results; open the schema view', async ({
+  page,
+}) => {
   const username = `e2e_console_${Date.now()}`;
 
   // Register (logs in) and land on the picker.
