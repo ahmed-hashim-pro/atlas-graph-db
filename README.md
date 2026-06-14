@@ -9,7 +9,9 @@ algorithms view. The bottom-dock console is a CodeMirror 6 editor with AQL
 syntax highlighting, schema-aware autocomplete, and ⌘/Ctrl+Enter to run; it
 shows a Results table, a visual EXPLAIN Plan tree, and a localStorage-persisted
 History tab, surfaces AqlError as a caret-positioned message, and can project
-node-bearing results onto the canvas. The Schema view auto-generates a diagram
+node-bearing results onto the canvas. The v1 error surface is the error banner
+plus a caret-positioned code snippet; inline CodeMirror squiggle decorations are
+deferred to M6d. The Schema view auto-generates a diagram
 of labels (with counts) and edge types from `Database.schema()` introspection.
 The Algorithms view offers parameter forms for the v1 algorithm set
 (PageRank/Louvain/components/degree/betweenness/shortest paths/BFS/DFS/topoSort/

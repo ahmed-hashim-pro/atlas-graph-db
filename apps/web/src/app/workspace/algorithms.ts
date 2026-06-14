@@ -148,8 +148,11 @@ function isSet(v: number | string | undefined): v is number | string {
 }
 
 /**
- * Build an injection-safe `CALL algo.<name>({k: $k, …}) YIELD … RETURN …` string.
- * Every literal flows through `$params`, never string interpolation.
+ * Build an injection-safe `CALL algo.<name>({k: $k, …}) YIELD …` string. Every
+ * literal flows through `$params`, never string interpolation. The AQL grammar's
+ * `CALL` ends after `YIELD` (the YIELD names are the result columns); a trailing
+ * `RETURN` is a parse error, so we do not append one. `paintFromRows` reads the
+ * result by YIELD column name.
  */
 export function buildAlgorithmCall(
   spec: AlgorithmSpec,
@@ -167,7 +170,7 @@ export function buildAlgorithmCall(
   const optionsMap = entries.length > 0 ? `{${entries.join(', ')}}` : '';
   const yields = spec.yields.join(', ');
   return {
-    query: `CALL ${spec.name}(${optionsMap}) YIELD ${yields} RETURN ${yields}`,
+    query: `CALL ${spec.name}(${optionsMap}) YIELD ${yields}`,
     params,
   };
 }

@@ -7,6 +7,8 @@ import {
   WORKSPACE_GRAPH_STORE,
   InMemoryWorkspaceGraphStore,
 } from './workspace-graph-store.contract';
+import { GraphStore } from './graph.store';
+import { GraphStoreWorkspaceAdapter } from './graph-store.adapter';
 
 const okResult: QueryResponse = {
   columns: ['name'],
@@ -16,7 +18,9 @@ const okResult: QueryResponse = {
 
 function withDb(query: ReturnType<typeof vi.fn>): ConsoleStore {
   const database = vi.fn().mockReturnValue({ query });
-  TestBed.configureTestingModule({ providers: [{ provide: AtlasApi, useValue: { database } }] });
+  TestBed.configureTestingModule({
+    providers: [ConsoleStore, { provide: AtlasApi, useValue: { database } }],
+  });
   const store = TestBed.inject(ConsoleStore);
   store.useDatabase('kb');
   return store;
@@ -85,6 +89,7 @@ describe('ConsoleStore', () => {
     const fake = new InMemoryWorkspaceGraphStore();
     TestBed.configureTestingModule({
       providers: [
+        ConsoleStore,
         { provide: AtlasApi, useValue: { database } },
         { provide: WORKSPACE_GRAPH_STORE, useValue: fake },
       ],
@@ -101,5 +106,37 @@ describe('ConsoleStore', () => {
     const store = withDb(vi.fn().mockResolvedValue(okResult));
     await store.run('MATCH (p) RETURN p.name AS name');
     expect(store.projectable()).toBe(false);
+  });
+
+  // Finding 1: with the SAME wiring the workspace uses (WORKSPACE_GRAPH_STORE →
+  // the real GraphStoreWorkspaceAdapter over the real GraphStore), projecting a
+  // result must reach the real GraphStore's replaceGraph — proving the store is
+  // workspace-scoped and not pinned to the dead in-memory root default.
+  it('projectToCanvas() reaches the real GraphStore via the workspace adapter', async () => {
+    const nodeResult = {
+      columns: ['p'],
+      rows: [
+        [{ id: 1, labels: ['Person'], props: { name: 'Ada' } }],
+        [{ id: 2, labels: ['Person'], props: { name: 'Bob' } }],
+      ],
+      stats: { rowsExamined: 2, elapsedMs: 1 },
+    };
+    const database = vi.fn().mockReturnValue({ query: vi.fn().mockResolvedValue(nodeResult) });
+    TestBed.configureTestingModule({
+      providers: [
+        ConsoleStore,
+        GraphStore,
+        { provide: AtlasApi, useValue: { database } },
+        { provide: WORKSPACE_GRAPH_STORE, useClass: GraphStoreWorkspaceAdapter },
+      ],
+    });
+    const store = TestBed.inject(ConsoleStore);
+    const graphStore = TestBed.inject(GraphStore);
+    const replaceSpy = vi.spyOn(graphStore, 'replaceGraph');
+    store.useDatabase('kb');
+    await store.run('MATCH (p:Person) RETURN p');
+    store.projectToCanvas();
+    expect(replaceSpy).toHaveBeenCalledTimes(1);
+    expect(graphStore.visibleNodes().map((n) => n.id)).toEqual(['1', '2']);
   });
 });

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { AtlasApi } from '../core/atlas-api';
 import { Console } from './console';
+import { ConsoleStore } from './console.store';
 
 describe('Console host', () => {
   it('runs the editor query through the store and shows the results table', async () => {
@@ -13,7 +14,10 @@ describe('Console host', () => {
     const schema = vi.fn().mockResolvedValue({ labels: [], edgeTypes: [] });
     await TestBed.configureTestingModule({
       imports: [Console],
-      providers: [{ provide: AtlasApi, useValue: { database: () => ({ query, schema }) } }],
+      providers: [
+        ConsoleStore,
+        { provide: AtlasApi, useValue: { database: () => ({ query, schema }) } },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(Console);
     fixture.componentRef.setInput('database', 'kb');
@@ -40,6 +44,7 @@ describe('Console host', () => {
     await TestBed.configureTestingModule({
       imports: [Console],
       providers: [
+        ConsoleStore,
         {
           provide: AtlasApi,
           useValue: {
