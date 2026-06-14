@@ -76,14 +76,21 @@ export class Workspace implements AfterViewInit, OnDestroy {
     if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'k' || ev.key === 'K')) {
       ev.preventDefault();
       this.paletteOpen.update((v) => !v);
-      if (this.paletteOpen()) queueMicrotask(() => this.palette()?.focusInput());
+      if (this.paletteOpen())
+        queueMicrotask(() => {
+          this.palette()?.captureOpener();
+          this.palette()?.focusInput();
+        });
     }
   }
 
   /** Open the palette from the topbar button and focus its input once mounted. */
   openPalette(): void {
     this.paletteOpen.set(true);
-    queueMicrotask(() => this.palette()?.focusInput());
+    queueMicrotask(() => {
+      this.palette()?.captureOpener();
+      this.palette()?.focusInput();
+    });
   }
 
   closePalette(): void {

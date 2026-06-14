@@ -28,9 +28,25 @@ export class CommandPalette {
   readonly active = signal(0);
   readonly busy = signal(false);
 
+  /** The element focused before the palette opened; restored on close. */
+  private opener: HTMLElement | null = null;
+
+  /** Workspace calls this right before it shows the palette so we can restore focus later. */
+  captureOpener(): void {
+    const el = document.activeElement;
+    this.opener = el instanceof HTMLElement ? el : null;
+  }
+
   /** Focus the search box on open (called by the workspace after it mounts). */
   focusInput(): void {
     this.searchBox()?.nativeElement.focus();
+  }
+
+  /** Close: restore focus to the opener, then notify the host to unmount us. */
+  close(): void {
+    this.opener?.focus();
+    this.opener = null;
+    this.closed.emit();
   }
 
   async search(): Promise<void> {
@@ -54,7 +70,11 @@ export class CommandPalette {
 
   onKey(ev: KeyboardEvent): void {
     if (ev.key === 'Escape') {
-      this.closed.emit();
+      this.close();
+      return;
+    }
+    if (ev.key === 'Tab') {
+      this.trapTab(ev);
       return;
     }
     const hits = this.hits();
@@ -68,6 +88,30 @@ export class CommandPalette {
       ev.preventDefault();
       const hit = hits[this.active()];
       if (hit) this.pick.emit(hit);
+    }
+  }
+
+  /** Keep Tab focus inside the dialog (wrap at the first/last focusable). */
+  private trapTab(ev: KeyboardEvent): void {
+    const root = this.searchBox()?.nativeElement.closest('.palette') as HTMLElement | null;
+    if (!root) return;
+    const items = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'input, button, [href], [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((el) => !el.hasAttribute('disabled'));
+    if (items.length === 0) return;
+    const first = items[0]!;
+    const last = items[items.length - 1]!;
+    const activeEl = document.activeElement;
+    if (ev.shiftKey && activeEl === first) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && activeEl === last) {
+      ev.preventDefault();
+      first.focus();
+    } else if (items.length === 1) {
+      ev.preventDefault(); // single focusable → stay put
     }
   }
 
