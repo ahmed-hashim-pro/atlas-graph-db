@@ -33,6 +33,7 @@ export class CatalogService {
     await ensure('unique', 'User', 'username');
     await ensure('unique', 'Database', 'name');
     await ensure('unique', 'Token', 'tokenId');
+    await ensure('unique', 'Session', 'sid');
     return new CatalogService(db);
   }
 
@@ -210,6 +211,48 @@ export class CatalogService {
     return true;
   }
 
+  // ---- sessions (server-side, revocable) ----
+  /** Mint an opaque session id bound to a user; returned id goes in the signed cookie. */
+  async createSession(username: string): Promise<string> {
+    const user = this.requireUserNode(username);
+    const sid = randomBytes(24).toString('base64url');
+    await this.db.transact((tx) => {
+      const s = tx.createNode(['Session'], { sid, createdAt: nowIso() });
+      tx.createEdge('HAS_SESSION', user.id, s);
+    });
+    return sid;
+  }
+
+  /** Resolve a session id to its owning username, or null if unknown/revoked. */
+  async findSessionUser(sid: string): Promise<string | null> {
+    const s = this.sessionNode(sid);
+    if (!s) return null;
+    for (const e of this.db.inEdges(s.id, 'HAS_SESSION')) {
+      const u = this.db.getNode(e.from);
+      if (u) return String(u.props.username);
+    }
+    return null;
+  }
+
+  /** Revoke one session (logout). */
+  async deleteSession(sid: string): Promise<void> {
+    const s = this.sessionNode(sid);
+    if (!s) return;
+    await this.db.transact((tx) => tx.deleteNode(s.id, { detach: true }));
+  }
+
+  /** Revoke every session for a user (e.g. on a credential change). */
+  async deleteSessionsForUser(username: string): Promise<void> {
+    const user = this.userNode(username);
+    if (!user) return;
+    const sessionIds: NodeId[] = [];
+    for (const e of this.db.outEdges(user.id, 'HAS_SESSION')) sessionIds.push(e.to);
+    if (sessionIds.length === 0) return;
+    await this.db.transact((tx) => {
+      for (const id of sessionIds) tx.deleteNode(id, { detach: true });
+    });
+  }
+
   // ---- private node lookups (use the unique index via the fluent API) ----
   private userNode(username: string) {
     return (
@@ -235,6 +278,15 @@ export class CatalogService {
         .graph()
         .nodes('Token')
         .where((p) => p.tokenId === tokenId)
+        .first() ?? null
+    );
+  }
+  private sessionNode(sid: string) {
+    return (
+      this.db
+        .graph()
+        .nodes('Session')
+        .where((p) => p.sid === sid)
         .first() ?? null
     );
   }

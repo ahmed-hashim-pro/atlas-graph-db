@@ -19,11 +19,13 @@ export async function registerAuthRoutes(app: FastifyInstance, ctx: AppContext):
     const user = await ctx.catalog.findUser(body.username);
     if (!user || !(await verifyPassword(user.passwordHash, body.password)))
       throw new HttpError(401, 'UNAUTHENTICATED', 'invalid username or password');
-    void reply.setCookie('atlas_session', user.username, {
+    const sid = await ctx.catalog.createSession(user.username);
+    void reply.setCookie('atlas_session', sid, {
       httpOnly: true,
       sameSite: 'lax',
       signed: true,
       path: '/',
+      maxAge: Math.floor(ctx.config.sessionTtlMs / 1000),
     });
     const info: UserInfo = { username: user.username, isAdmin: user.isAdmin };
     return info;
@@ -34,7 +36,12 @@ export async function registerAuthRoutes(app: FastifyInstance, ctx: AppContext):
     return info;
   });
 
-  app.post('/api/auth/logout', async (_req, reply) => {
+  app.post('/api/auth/logout', async (req, reply) => {
+    const raw = req.cookies?.atlas_session;
+    if (raw) {
+      const unsigned = req.unsignCookie(raw);
+      if (unsigned.valid && unsigned.value) await ctx.catalog.deleteSession(unsigned.value);
+    }
     void reply.clearCookie('atlas_session', { path: '/' });
     return { ok: true };
   });

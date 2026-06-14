@@ -69,6 +69,34 @@ describe('tokens', () => {
   });
 });
 
+describe('sessions', () => {
+  it('creates, finds, deletes, and bulk-revokes sessions for a user', async () => {
+    await cat.createUser('ada', 'h', false);
+    const s1 = await cat.createSession('ada');
+    const s2 = await cat.createSession('ada');
+    expect(s1).not.toBe(s2);
+    expect(await cat.findSessionUser(s1)).toBe('ada');
+    expect(await cat.findSessionUser('nope')).toBeNull();
+
+    await cat.deleteSession(s1);
+    expect(await cat.findSessionUser(s1)).toBeNull();
+    expect(await cat.findSessionUser(s2)).toBe('ada'); // unaffected
+
+    await cat.deleteSessionsForUser('ada');
+    expect(await cat.findSessionUser(s2)).toBeNull();
+  });
+
+  it('sessions survive reopen', async () => {
+    await cat.createUser('ada', 'h', false);
+    const sid = await cat.createSession('ada');
+    await cat.close();
+    const c2 = await CatalogService.open(join(dir, '_catalog'));
+    expect(await c2.findSessionUser(sid)).toBe('ada');
+    await c2.close();
+    cat = await CatalogService.open(join(dir, '_catalog')); // for afterEach
+  });
+});
+
 describe('persistence', () => {
   it('survives reopen', async () => {
     await cat.createUser('ada', 'h', true);
