@@ -1,0 +1,45 @@
+<section class="algorithms-view" aria-label="Algorithms">
+  <h1>Algorithms</h1>
+  <div class="algo-layout">
+    <nav class="algo-list" aria-label="Algorithm list">
+      @for (a of algorithms; track a.name) {
+        <button type="button" [class.active]="a.name === selected().name" (click)="select(a)">
+          {{ a.label }}
+        </button>
+      }
+    </nav>
+    <form class="algo-form" (ngSubmit)="run()">
+      <h2>{{ selected().label }}</h2>
+      @for (p of selected().params; track p.key) {
+        <label [attr.for]="'param-' + p.key">{{ p.label }}</label>
+        @if (p.type === 'enum') {
+          <select
+            [id]="'param-' + p.key"
+            [ngModel]="values()[p.key]"
+            [name]="p.key"
+            (ngModelChange)="setValue(p.key, $event, false)"
+          >
+            @for (opt of p.options; track opt) {
+              <option [value]="opt">{{ opt }}</option>
+            }
+          </select>
+        } @else {
+          <input
+            [id]="'param-' + p.key"
+            [name]="p.key"
+            [type]="p.type === 'string' ? 'text' : 'number'"
+            [ngModel]="values()[p.key]"
+            (ngModelChange)="setValue(p.key, $event, p.type !== 'string')"
+          />
+        }
+      }
+      <button type="submit" [disabled]="running()">{{ running() ? 'Running…' : 'Run' }}</button>
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
+      @if (painted() > 0) {
+        <p class="painted">Painted {{ painted() }} results onto the canvas.</p>
+      }
+    </form>
+  </div>
+</section>
