@@ -2,11 +2,14 @@ import { Injectable } from '@angular/core';
 import {
   connect,
   type AtlasClient,
+  type CreatedToken,
   type Database,
   type DbSummary,
+  type ImportCsvBody,
   type SeedResult,
+  type TokenSummary,
 } from '@atlas/client';
-import type { UserInfo } from '@atlas/protocol';
+import type { DbInfo, ImportReq, ImportResult, RoleName, UserInfo } from '@atlas/protocol';
 import { environment } from '../../environments/environment';
 
 /**
@@ -40,5 +43,29 @@ export class AtlasApi {
   }
   database(name: string): Database {
     return this.client.database(name);
+  }
+  getDatabase(name: string): Promise<DbInfo> {
+    return this.client.getDatabase(name);
+  }
+  createToken(name: string): Promise<CreatedToken> {
+    return this.client.createToken(name);
+  }
+  listTokens(): Promise<TokenSummary[]> {
+    return this.client.listTokens();
+  }
+  revokeToken(tokenId: string): Promise<void> {
+    return this.client.revokeToken(tokenId);
+  }
+  grantRole(name: string, username: string, role: RoleName): Promise<void> {
+    return this.client.grantRole(name, username, role);
+  }
+  revokeRole(name: string, username: string): Promise<void> {
+    return this.client.revokeRole(name, username);
+  }
+  import(name: string, body: ImportReq): Promise<ImportResult> {
+    return this.client.import(name, body);
+  }
+  importCsv(name: string, body: ImportCsvBody): Promise<ImportResult> {
+    return this.client.importCsv(name, body);
   }
 }
