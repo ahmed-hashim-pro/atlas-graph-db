@@ -59,10 +59,6 @@
     </div>
   }
   @if (paletteOpen()) {
-    <app-command-palette
-      [database]="name"
-      (pick)="onPick($event)"
-      (closed)="closePalette()"
-    />
+    <app-command-palette [database]="name" (pick)="onPick($event)" (closed)="closePalette()" />
   }
 </div>

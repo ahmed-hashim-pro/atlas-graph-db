@@ -84,9 +84,7 @@ describe('Workspace page', () => {
     fixture.detectChanges();
     await fixture.componentInstance.ready;
     expect(fixture.componentInstance.paletteOpen()).toBe(false);
-    fixture.componentInstance.onHostKey(
-      new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
-    );
+    fixture.componentInstance.onHostKey(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
     expect(fixture.componentInstance.paletteOpen()).toBe(true);
   });
 

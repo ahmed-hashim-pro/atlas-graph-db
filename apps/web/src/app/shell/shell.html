@@ -1,6 +1,16 @@
 <div class="shell">
   <header class="topbar">
     <div class="brand">Atlas</div>
+    <nav class="shell-nav" aria-label="Primary">
+      <a
+        routerLink="/databases"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        >Databases</a
+      >
+      <a routerLink="/databases/import" routerLinkActive="active">Import</a>
+      <a routerLink="/databases/admin" routerLinkActive="active">Admin</a>
+    </nav>
     <div class="topbar-right">
       <app-theme-switcher />
       @if (auth.user(); as u) {

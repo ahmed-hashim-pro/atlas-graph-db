@@ -37,7 +37,11 @@ describe('RolesStore', () => {
   it('grant() calls the API then refreshes owners', async () => {
     const getDatabase = vi.fn().mockResolvedValue(kbInfo);
     const grantRole = vi.fn().mockResolvedValue(undefined);
-    const store = withApi({ listDatabases: vi.fn().mockResolvedValue(dbs), getDatabase, grantRole });
+    const store = withApi({
+      listDatabases: vi.fn().mockResolvedValue(dbs),
+      getDatabase,
+      grantRole,
+    });
     await store.load();
     await store.select('kb');
     await store.grant('bob', 'editor');
@@ -47,7 +51,11 @@ describe('RolesStore', () => {
   it('grant() maps a 404 (unknown user) to a friendly error', async () => {
     const getDatabase = vi.fn().mockResolvedValue(kbInfo);
     const grantRole = vi.fn().mockRejectedValue(Object.assign(new Error('no'), { status: 404 }));
-    const store = withApi({ listDatabases: vi.fn().mockResolvedValue(dbs), getDatabase, grantRole });
+    const store = withApi({
+      listDatabases: vi.fn().mockResolvedValue(dbs),
+      getDatabase,
+      grantRole,
+    });
     await store.load();
     await store.select('kb');
     await store.grant('ghost', 'viewer');
@@ -57,7 +65,11 @@ describe('RolesStore', () => {
   it('revoke() calls the API with the db + username', async () => {
     const getDatabase = vi.fn().mockResolvedValue(kbInfo);
     const revokeRole = vi.fn().mockResolvedValue(undefined);
-    const store = withApi({ listDatabases: vi.fn().mockResolvedValue(dbs), getDatabase, revokeRole });
+    const store = withApi({
+      listDatabases: vi.fn().mockResolvedValue(dbs),
+      getDatabase,
+      revokeRole,
+    });
     await store.load();
     await store.select('kb');
     await store.revoke('bob');

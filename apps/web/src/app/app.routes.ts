@@ -9,7 +9,11 @@ export const routes: Routes = [
     path: 'databases',
     canActivate: [authGuard],
     loadComponent: () => import('./shell/shell').then((m) => m.Shell),
-    children: [{ path: '', loadComponent: () => import('./picker/picker').then((m) => m.Picker) }],
+    children: [
+      { path: '', loadComponent: () => import('./picker/picker').then((m) => m.Picker) },
+      { path: 'import', loadComponent: () => import('./import/import').then((m) => m.Import) },
+      { path: 'admin', loadComponent: () => import('./admin/admin').then((m) => m.Admin) },
+    ],
   },
   {
     path: 'db/:name',

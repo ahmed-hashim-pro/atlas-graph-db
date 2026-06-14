@@ -33,7 +33,10 @@ function isRawNode(v: unknown): v is RawNode {
  * `CONTAINS` uses the full-text index when present and falls back to a scan
  * otherwise (spec §4.5), which is fine for the explorer's interactive cap.
  */
-export function searchQuery(term: string, limit: number): {
+export function searchQuery(
+  term: string,
+  limit: number,
+): {
   query: string;
   params: { term: string; limit: number };
 } {

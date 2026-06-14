@@ -37,6 +37,9 @@
             <button type="button" (click)="open(db.name)">Open</button>
             @if (db.role === 'owner' || db.role === 'editor') {
               <button type="button" (click)="seed(db.name)">Seed science-history</button>
+              <a class="db-import" routerLink="/databases/import" [queryParams]="{ db: db.name }"
+                >Import</a
+              >
             }
           </div>
         </li>

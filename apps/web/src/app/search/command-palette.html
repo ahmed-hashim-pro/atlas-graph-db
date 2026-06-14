@@ -1,4 +1,11 @@
-<div class="palette-backdrop" (click)="closed.emit()"></div>
+<div
+  class="palette-backdrop"
+  role="button"
+  tabindex="-1"
+  aria-label="Close search"
+  (click)="closed.emit()"
+  (keydown.escape)="closed.emit()"
+></div>
 <div
   class="palette"
   role="dialog"
@@ -30,9 +37,11 @@
         [id]="'hit-' + i"
         class="palette-hit"
         role="option"
+        tabindex="-1"
         [attr.aria-selected]="i === active()"
         [class.active]="i === active()"
         (click)="choose(hit)"
+        (keydown.enter)="choose(hit)"
       >
         <span class="hit-label">{{ hit.label }}</span>
         <span class="hit-labels">{{ hit.labels.join(', ') }}</span>

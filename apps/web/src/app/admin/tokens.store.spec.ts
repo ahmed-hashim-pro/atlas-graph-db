@@ -22,7 +22,10 @@ describe('TokensStore', () => {
   });
 
   it('create() shows the full secret once and reloads the list', async () => {
-    const listTokens = vi.fn().mockResolvedValueOnce(list).mockResolvedValueOnce([...list, { tokenId: 't2', name: 'cli' }]);
+    const listTokens = vi
+      .fn()
+      .mockResolvedValueOnce(list)
+      .mockResolvedValueOnce([...list, { tokenId: 't2', name: 'cli' }]);
     const createToken = vi.fn().mockResolvedValue(created);
     const store = withApi({ listTokens, createToken });
     await store.load();
