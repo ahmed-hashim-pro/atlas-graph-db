@@ -1,0 +1,41 @@
+<nav class="legend" aria-label="Labels and edge types">
+  <section>
+    <h2 class="legend-title">Labels</h2>
+    <ul class="legend-list">
+      @for (l of store.labels(); track l.label) {
+        <li class="legend-row">
+          <label>
+            <input
+              type="checkbox"
+              [checked]="l.visible"
+              (change)="store.toggleLabel(l.label)"
+              [attr.aria-label]="'Toggle ' + l.label"
+            />
+            <span class="swatch" [style.background]="swatch(l.label)" aria-hidden="true"></span>
+            <span class="legend-name">{{ l.label }}</span>
+            <span class="legend-count">{{ l.count }}</span>
+          </label>
+        </li>
+      }
+    </ul>
+  </section>
+  <section>
+    <h2 class="legend-title">Edge types</h2>
+    <ul class="legend-list">
+      @for (t of store.edgeTypes(); track t.type) {
+        <li class="legend-row">
+          <label>
+            <input
+              type="checkbox"
+              [checked]="t.visible"
+              (change)="store.toggleEdgeType(t.type)"
+              [attr.aria-label]="'Toggle ' + t.type"
+            />
+            <span class="legend-name">{{ t.type }}</span>
+            <span class="legend-count">{{ t.count }}</span>
+          </label>
+        </li>
+      }
+    </ul>
+  </section>
+</nav>
