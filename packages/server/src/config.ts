@@ -9,6 +9,7 @@ export interface ServerConfig {
   rateLimit: number;
   rateWindowMs: number;
   staticDir?: string;
+  sessionTtlMs: number;
 }
 
 export function loadConfig(env: Record<string, string | undefined>): ServerConfig {
@@ -32,5 +33,6 @@ export function loadConfig(env: Record<string, string | undefined>): ServerConfi
     rateLimit: Number(env.ATLAS_RATE_LIMIT ?? '600'),
     rateWindowMs: Number(env.ATLAS_RATE_WINDOW_MS ?? '60000'),
     staticDir: env.ATLAS_STATIC_DIR,
+    sessionTtlMs: Number(env.ATLAS_SESSION_TTL_MS ?? String(7 * 24 * 60 * 60 * 1000)),
   };
 }

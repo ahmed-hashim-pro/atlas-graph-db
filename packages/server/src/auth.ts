@@ -28,8 +28,11 @@ export async function authenticate(
   if (sid) {
     const unsigned = req.unsignCookie(sid);
     if (unsigned.valid && unsigned.value) {
-      const user = await catalog.findUser(unsigned.value);
-      if (user) return { username: user.username, isAdmin: user.isAdmin };
+      const username = await catalog.findSessionUser(unsigned.value);
+      if (username) {
+        const user = await catalog.findUser(username);
+        if (user) return { username: user.username, isAdmin: user.isAdmin };
+      }
     }
   }
   const auth = req.headers.authorization;

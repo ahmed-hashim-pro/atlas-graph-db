@@ -95,4 +95,27 @@ describe('auth routes', () => {
     const cleared = out.cookies.find((c) => c.name === 'atlas_session');
     expect(cleared?.value === '' || (cleared?.expires?.getTime() ?? 0) <= Date.now()).toBe(true);
   });
+
+  it('logout invalidates the session: the old cookie is rejected with 401', async () => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { username: 'ada', password: 'secret12' },
+    });
+    const cookie = `atlas_session=${login.cookies.find((c) => c.name === 'atlas_session')!.value}`;
+
+    // The fresh cookie works.
+    expect((await app.inject({ method: 'GET', url: '/api/auth/whoami', headers: { cookie } })).statusCode).toBe(200);
+
+    // Log out (server-side session deleted), then the SAME cookie value 401s.
+    await app.inject({ method: 'POST', url: '/api/auth/logout', headers: { cookie } });
+    const after = await app.inject({ method: 'GET', url: '/api/auth/whoami', headers: { cookie } });
+    expect(after.statusCode).toBe(401);
+    expect(after.json().code).toBe('UNAUTHENTICATED');
+  });
 });
