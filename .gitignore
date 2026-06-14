@@ -11,3 +11,5 @@ data/
 apps/web/.angular/
 apps/web/dist/
 apps/web/out-tsc/
+apps/web/playwright-report/
+apps/web/test-results/

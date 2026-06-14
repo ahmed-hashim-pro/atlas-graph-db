@@ -38,7 +38,10 @@ describe('AuthService', () => {
   });
 
   it('logout clears the user signal', async () => {
-    const svc = withApi({ login: vi.fn().mockResolvedValue(ada), logout: vi.fn().mockResolvedValue(undefined) });
+    const svc = withApi({
+      login: vi.fn().mockResolvedValue(ada),
+      logout: vi.fn().mockResolvedValue(undefined),
+    });
     await svc.login('ada', 'secret12');
     await svc.logout();
     expect(svc.user()).toBeNull();

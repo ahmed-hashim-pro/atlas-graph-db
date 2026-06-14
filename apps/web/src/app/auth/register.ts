@@ -30,7 +30,9 @@ export class Register {
       await this.router.navigateByUrl('/databases');
     } catch (err) {
       const status = (err as { status?: number }).status;
-      this.error.set(status === 409 ? 'That username is taken.' : 'Registration failed. Please try again.');
+      this.error.set(
+        status === 409 ? 'That username is taken.' : 'Registration failed. Please try again.',
+      );
     } finally {
       this.busy.set(false);
     }

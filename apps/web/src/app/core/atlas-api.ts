@@ -1,5 +1,11 @@
 import { Injectable } from '@angular/core';
-import { connect, type AtlasClient, type Database, type DbSummary, type SeedResult } from '@atlas/client';
+import {
+  connect,
+  type AtlasClient,
+  type Database,
+  type DbSummary,
+  type SeedResult,
+} from '@atlas/client';
 import type { UserInfo } from '@atlas/protocol';
 import { environment } from '../../environments/environment';
 
