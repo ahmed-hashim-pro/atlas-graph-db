@@ -1,10 +1,5 @@
 <label class="sr-only" for="theme-select">Theme</label>
-<select
-  id="theme-select"
-  aria-label="Theme"
-  [ngModel]="theme.current()"
-  (ngModelChange)="change($event)"
->
+<select id="theme-select" [ngModel]="theme.current()" (ngModelChange)="change($event)">
   @for (t of theme.themes; track t.id) {
     <option [value]="t.id">{{ t.label }}</option>
   }
