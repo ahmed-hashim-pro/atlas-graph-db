@@ -3,6 +3,7 @@ import type { SchemaSummary } from '@atlas/core';
 import type { QueryResponse } from '@atlas/protocol';
 import { AtlasApi } from '../core/atlas-api';
 import { planToTree, type PlanTreeRow } from './explain-plan';
+import { resultToGraph, WORKSPACE_GRAPH_STORE } from './workspace-graph-store.contract';
 
 export type ConsoleTab = 'results' | 'plan' | 'history';
 
@@ -23,6 +24,9 @@ interface ClientErrorLike {
 @Injectable({ providedIn: 'root' })
 export class ConsoleStore {
   private readonly api = inject(AtlasApi);
+  // Optional so the console store works in unit tests / contexts without a
+  // canvas store provider; the workspace binds the real GraphStore adapter.
+  private readonly graphStore = inject(WORKSPACE_GRAPH_STORE, { optional: true });
   private dbName = '';
 
   private readonly _columns = signal<string[]>([]);
@@ -33,6 +37,7 @@ export class ConsoleStore {
   private readonly _tab = signal<ConsoleTab>('results');
   private readonly _schema = signal<SchemaSummary | null>(null);
   private readonly _plan = signal<PlanTreeRow[]>([]);
+  private readonly _projectable = signal(false);
 
   readonly columns = this._columns.asReadonly();
   readonly rows = this._rows.asReadonly();
@@ -43,6 +48,8 @@ export class ConsoleStore {
   readonly schema = this._schema.asReadonly();
   readonly plan = this._plan.asReadonly();
   readonly hasResults = computed(() => this._columns().length > 0);
+  /** True when the last result contains node cells the canvas can display. */
+  readonly projectable = this._projectable.asReadonly();
 
   useDatabase(name: string): void {
     this.dbName = name;
@@ -71,6 +78,7 @@ export class ConsoleStore {
       this._columns.set(res.columns);
       this._rows.set(res.rows);
       this._stats.set(res.stats);
+      this._projectable.set(resultToGraph(res.columns, res.rows).nodes.length > 0);
       this._tab.set('results');
       return res;
     } catch (e) {
@@ -78,10 +86,17 @@ export class ConsoleStore {
       this._columns.set([]);
       this._rows.set([]);
       this._stats.set(null);
+      this._projectable.set(false);
       return null;
     } finally {
       this._running.set(false);
     }
+  }
+
+  /** Hand the current result's nodes/edges to the canvas store (console "project to canvas"). */
+  projectToCanvas(): void {
+    const graph = resultToGraph(this._columns(), this._rows());
+    if (graph.nodes.length > 0) this.graphStore?.setGraph(graph);
   }
 
   async explain(query: string): Promise<void> {
