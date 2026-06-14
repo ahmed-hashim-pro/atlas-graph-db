@@ -21,4 +21,16 @@ describe('AtlasApi', () => {
     expect(typeof db.query).toBe('function');
     expect(typeof db.schema).toBe('function');
   });
+
+  it('exposes the admin + import methods', () => {
+    const api = TestBed.runInInjectionContext(() => new AtlasApi());
+    expect(typeof api.createToken).toBe('function');
+    expect(typeof api.listTokens).toBe('function');
+    expect(typeof api.revokeToken).toBe('function');
+    expect(typeof api.grantRole).toBe('function');
+    expect(typeof api.revokeRole).toBe('function');
+    expect(typeof api.getDatabase).toBe('function');
+    expect(typeof api.import).toBe('function');
+    expect(typeof api.importCsv).toBe('function');
+  });
 });
