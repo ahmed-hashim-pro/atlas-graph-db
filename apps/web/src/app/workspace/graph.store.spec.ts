@@ -32,7 +32,47 @@ describe('GraphStore', () => {
       ['Person', 2, true],
       ['Doc', 1, true],
     ]);
-    expect(store.edgeTypes()).toEqual([{ type: 'KNOWS', count: 1, visible: true }]);
+    expect(store.edgeTypes().map((t) => [t.type, t.count, t.visible])).toEqual([
+      ['KNOWS', 1, true],
+    ]);
+  });
+
+  it('refreshLegendFromData MERGES with the schema legend: schema-only entries survive a partial load', () => {
+    const store = make();
+    // Full schema first: Person(2), Doc(1) labels; KNOWS(1) edge type.
+    store.ingestSchema(schema);
+    // Hide Doc to prove the visibility toggle is preserved across the merge.
+    store.toggleLabel('Doc');
+    // Load only a subset of Person nodes and no Doc nodes / no KNOWS edges.
+    store.addGraph({ nodes: [node('1'), node('2')], edges: [] });
+
+    const labels = store.labels();
+    const byLabel = new Map(labels.map((l) => [l.label, l]));
+    // Schema-only label (Doc) is NOT dropped despite zero loaded data...
+    expect(byLabel.has('Doc')).toBe(true);
+    // ...and falls back to its schema total (1) with its visibility preserved (toggled off).
+    expect(byLabel.get('Doc')).toMatchObject({ count: 1, visible: false });
+    // The loaded label's count reflects the live data (2 loaded), not the schema total.
+    expect(byLabel.get('Person')?.count).toBe(2);
+    // Stable order: schema order is preserved (Person before Doc).
+    expect(labels.map((l) => l.label)).toEqual(['Person', 'Doc']);
+
+    // The schema-only edge type (KNOWS) survives with its schema total even with no edges loaded.
+    const knows = store.edgeTypes().find((t) => t.type === 'KNOWS');
+    expect(knows).toMatchObject({ type: 'KNOWS', count: 1, visible: true });
+  });
+
+  it('addGraph appends labels/types discovered in data that the schema did not list', () => {
+    const store = make();
+    store.ingestSchema(schema); // Person, Doc / KNOWS
+    store.addGraph({
+      nodes: [node('1'), node('9', 'Robot')],
+      edges: [edge('e', '1', '9', 'BUILT')],
+    });
+    expect(store.labels().map((l) => l.label)).toEqual(['Person', 'Doc', 'Robot']);
+    expect(store.labels().find((l) => l.label === 'Robot')?.count).toBe(1);
+    expect(store.edgeTypes().map((t) => t.type)).toEqual(['KNOWS', 'BUILT']);
+    expect(store.edgeTypes().find((t) => t.type === 'BUILT')?.count).toBe(1);
   });
 
   it('addGraph merges nodes/edges and recomputes visible scene + counts', () => {

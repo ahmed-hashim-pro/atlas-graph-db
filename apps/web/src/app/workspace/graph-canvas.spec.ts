@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GraphCanvas } from './graph-canvas';
 import { GraphStore } from './graph.store';
+import { worldToScreen } from './viewport';
 
 describe('GraphCanvas component', () => {
   beforeEach(() => TestBed.resetTestingModule());
@@ -13,10 +14,47 @@ describe('GraphCanvas component', () => {
     return { fixture, cmp: fixture.componentInstance, store };
   }
 
+  /** Force a measurable host box (jsdom reports 0 for layout boxes by default). */
+  function stubHostSize(host: HTMLElement, width: number, height: number): void {
+    Object.defineProperty(host, 'clientWidth', { value: width, configurable: true });
+    Object.defineProperty(host, 'clientHeight', { value: height, configurable: true });
+  }
+
   it('creates and renders a canvas element', () => {
     const { fixture } = setup();
     fixture.detectChanges();
     expect((fixture.nativeElement as HTMLElement).querySelector('canvas')).toBeTruthy();
+  });
+
+  it('sizes the canvas backing store from the host box × devicePixelRatio', () => {
+    const { fixture } = setup();
+    const host = fixture.nativeElement as HTMLElement;
+    stubHostSize(host, 500, 400);
+    const dpr = typeof devicePixelRatio === 'number' && devicePixelRatio > 0 ? devicePixelRatio : 1;
+    fixture.detectChanges(); // triggers ngAfterViewInit → resizeCanvas()
+    const canvas = host.querySelector('canvas')!;
+    expect(canvas.width).toBe(Math.round(500 * dpr));
+    expect(canvas.height).toBe(Math.round(400 * dpr));
+    // CSS size is host-relative (100%), independent of the backing-store pixels.
+    expect(canvas.style.width).toBe('100%');
+    expect(canvas.style.height).toBe('100%');
+  });
+
+  it('a pointer-down at a node’s projected screen coordinate selects that node', () => {
+    const { fixture, cmp, store } = setup();
+    const host = fixture.nativeElement as HTMLElement;
+    stubHostSize(host, 600, 400);
+    // A node placed away from the origin so the test exercises the real projection.
+    store.addGraph({
+      nodes: [{ id: 'n1', labels: ['Person'], props: {}, x: 120, y: -40 }],
+      edges: [],
+    });
+    fixture.detectChanges();
+    // Project the node's world position through the live viewport to a screen point,
+    // then drive a pointer-up there — hit-test + viewport must agree and select it.
+    const screen = worldToScreen({ x: 120, y: -40 }, cmp.viewport());
+    cmp.onPointerUp({ offsetX: screen.x, offsetY: screen.y, button: 0 } as PointerEvent);
+    expect(store.selection()).toEqual({ kind: 'node', id: 'n1' });
   });
 
   it('click on a node selects it via the store (hit-test wired)', () => {
@@ -26,6 +64,24 @@ describe('GraphCanvas component', () => {
     // World (0,0) at identity-ish transform → screen near origin; click there.
     cmp.onPointerUp({ offsetX: 0, offsetY: 0, button: 0 } as PointerEvent);
     expect(store.selection()).toEqual({ kind: 'node', id: 'a' });
+  });
+
+  it('keyboard (Enter / Arrow) selects and cycles through the visible nodes', () => {
+    const { fixture, cmp, store } = setup();
+    store.addGraph({
+      nodes: [
+        { id: 'a', labels: ['Person'], props: {}, x: 0, y: 0 },
+        { id: 'b', labels: ['Person'], props: {}, x: 10, y: 0 },
+      ],
+      edges: [],
+    });
+    fixture.detectChanges();
+    cmp.onKeyDown({ key: 'Enter', preventDefault: vi.fn() } as unknown as KeyboardEvent);
+    expect(store.selection()).toEqual({ kind: 'node', id: 'a' });
+    cmp.onKeyDown({ key: 'ArrowRight', preventDefault: vi.fn() } as unknown as KeyboardEvent);
+    expect(store.selection()).toEqual({ kind: 'node', id: 'b' });
+    cmp.onKeyDown({ key: 'ArrowRight', preventDefault: vi.fn() } as unknown as KeyboardEvent);
+    expect(store.selection()).toEqual({ kind: 'node', id: 'a' }); // wraps around
   });
 
   it('click on empty space clears the selection', () => {

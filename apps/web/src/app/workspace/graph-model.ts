@@ -53,6 +53,13 @@ export interface Scene {
   selection: Selection;
   /** Stable label→palette-index map so a label keeps its color across frames. */
   colorOf: (labels: string[]) => string;
+  /**
+   * Logical (CSS-pixel) dimensions of the drawing surface used to clear the
+   * background. When the context is scaled by `devicePixelRatio`, this is the
+   * CSS size (not the backing-store size). Falls back to `ctx.canvas` when omitted.
+   */
+  width?: number;
+  height?: number;
 }
 
 export interface VisibilityState {

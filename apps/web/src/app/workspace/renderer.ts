@@ -3,8 +3,11 @@ import { worldToScreen } from './viewport';
 
 /** Draw one frame of the graph to a 2D context. Pure: no DOM, no state beyond the ctx. */
 export function drawGraph(ctx: CanvasRenderingContext2D, scene: Scene): void {
-  const { width, height } = ctx.canvas;
   const { viewport: vp, theme, nodes, edges, selection, colorOf } = scene;
+  // Clear in logical (CSS-pixel) space so a dpr-scaled context still wipes the
+  // whole surface; fall back to the backing-store size when not supplied.
+  const width = scene.width ?? ctx.canvas.width;
+  const height = scene.height ?? ctx.canvas.height;
 
   // Clear with the theme background.
   ctx.fillStyle = theme.background;
