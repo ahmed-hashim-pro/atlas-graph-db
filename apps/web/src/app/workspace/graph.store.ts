@@ -15,11 +15,15 @@ export interface LabelEntry {
   label: string;
   count: number;
   visible: boolean;
+  /** Total reported by `Database.schema()`; shown when no data of this label is loaded. */
+  schemaCount?: number;
 }
 export interface EdgeTypeEntry {
   type: string;
   count: number;
   visible: boolean;
+  /** Total reported by `Database.schema()`; shown when no data of this type is loaded. */
+  schemaCount?: number;
 }
 export interface Connection {
   edge: GraphEdge;
@@ -79,18 +83,34 @@ export class GraphStore {
   });
 
   ingestSchema(schema: SchemaSummary): void {
-    const seenLabels = new Set(this._labels().map((l) => l.label));
-    const labels = [...this._labels()];
-    for (const l of schema.labels)
-      if (!seenLabels.has(l.label)) labels.push({ label: l.label, count: l.count, visible: true });
-      else labels.find((e) => e.label === l.label)!.count = l.count;
+    const labels = this._labels().map((l) => ({ ...l }));
+    const labelIndex = new Map(labels.map((l) => [l.label, l]));
+    for (const l of schema.labels) {
+      const existing = labelIndex.get(l.label);
+      if (existing) {
+        existing.count = l.count;
+        existing.schemaCount = l.count;
+      } else {
+        const entry = { label: l.label, count: l.count, visible: true, schemaCount: l.count };
+        labels.push(entry);
+        labelIndex.set(l.label, entry);
+      }
+    }
     this._labels.set(labels);
 
-    const seenTypes = new Set(this._edgeTypes().map((t) => t.type));
-    const types = [...this._edgeTypes()];
-    for (const t of schema.edgeTypes)
-      if (!seenTypes.has(t.type)) types.push({ type: t.type, count: t.count, visible: true });
-      else types.find((e) => e.type === t.type)!.count = t.count;
+    const types = this._edgeTypes().map((t) => ({ ...t }));
+    const typeIndex = new Map(types.map((t) => [t.type, t]));
+    for (const t of schema.edgeTypes) {
+      const existing = typeIndex.get(t.type);
+      if (existing) {
+        existing.count = t.count;
+        existing.schemaCount = t.count;
+      } else {
+        const entry = { type: t.type, count: t.count, visible: true, schemaCount: t.count };
+        types.push(entry);
+        typeIndex.set(t.type, entry);
+      }
+    }
     this._edgeTypes.set(types);
   }
 
@@ -155,30 +175,37 @@ export class GraphStore {
     return out;
   }
 
-  /** Ensure every label/edge-type seen in the data has a legend entry (counts from the live data). */
+  /**
+   * Keep the legend in sync with loaded data WITHOUT dropping schema-seeded entries that
+   * have no loaded data yet. Existing entries (from `ingestSchema` or earlier loads) keep
+   * their order, `visible` toggle, and `schemaCount`; their `count` updates to the live count
+   * when their label/type is present in the data, or falls back to the schema total (or 0)
+   * when nothing of that label/type is loaded. Newly-discovered labels/types are appended.
+   */
   private refreshLegendFromData(): void {
     const data = this._data();
+
     const labelCounts = new Map<string, number>();
     for (const n of data.nodes)
       for (const l of n.labels) labelCounts.set(l, (labelCounts.get(l) ?? 0) + 1);
-    const prevLabels = new Map(this._labels().map((l) => [l.label, l]));
-    this._labels.set(
-      [...labelCounts].map(([label, count]) => ({
-        label,
-        count,
-        visible: prevLabels.get(label)?.visible ?? true,
-      })),
-    );
+    const labels = this._labels().map((l) => ({
+      ...l,
+      count: labelCounts.get(l.label) ?? l.schemaCount ?? 0,
+    }));
+    const seenLabels = new Set(labels.map((l) => l.label));
+    for (const [label, count] of labelCounts)
+      if (!seenLabels.has(label)) labels.push({ label, count, visible: true });
+    this._labels.set(labels);
 
     const typeCounts = new Map<string, number>();
     for (const e of data.edges) typeCounts.set(e.type, (typeCounts.get(e.type) ?? 0) + 1);
-    const prevTypes = new Map(this._edgeTypes().map((t) => [t.type, t]));
-    this._edgeTypes.set(
-      [...typeCounts].map(([type, count]) => ({
-        type,
-        count,
-        visible: prevTypes.get(type)?.visible ?? true,
-      })),
-    );
+    const types = this._edgeTypes().map((t) => ({
+      ...t,
+      count: typeCounts.get(t.type) ?? t.schemaCount ?? 0,
+    }));
+    const seenTypes = new Set(types.map((t) => t.type));
+    for (const [type, count] of typeCounts)
+      if (!seenTypes.has(type)) types.push({ type, count, visible: true });
+    this._edgeTypes.set(types);
   }
 }
