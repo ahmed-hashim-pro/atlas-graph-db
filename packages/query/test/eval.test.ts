@@ -55,6 +55,17 @@ describe('evalExpr', () => {
     expect(run('labels(p)')).toEqual(['Person']);
   });
 
+  it('lower() lowercases a string argument', () => {
+    // Build via the parser so we exercise the real call-Expr shape.
+    const e = parseExpression(new TokenStream(lex("lower('AdA LoVeLaCe')"), "lower('AdA LoVeLaCe')"));
+    expect(evalExpr(e, new Map(), { params: {}, source: '' })).toBe('ada lovelace');
+  });
+
+  it('lower() of a non-string (or missing prop) is null, never throws', () => {
+    const e = parseExpression(new TokenStream(lex('lower($n)'), 'lower($n)'));
+    expect(evalExpr(e, new Map(), { params: { n: 42 }, source: '' })).toBeNull();
+  });
+
   it('missing parameters raise RUNTIME_ERROR with position', () => {
     try {
       run('p.born = $nope');

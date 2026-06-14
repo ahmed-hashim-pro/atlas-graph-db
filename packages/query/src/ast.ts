@@ -19,7 +19,7 @@ export type Expr =
   | { kind: 'call'; func: string; arg: Expr | '*'; distinct: boolean; pos: Pos };
 
 export const AGGREGATES = new Set(['count', 'collect', 'sum', 'avg', 'min', 'max']);
-export const SCALAR_FUNCS = new Set(['id', 'labels', 'type']);
+export const SCALAR_FUNCS = new Set(['id', 'labels', 'type', 'lower']);
 
 export interface NodePattern {
   variable?: string;

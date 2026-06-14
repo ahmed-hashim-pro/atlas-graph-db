@@ -20,18 +20,12 @@ function isRawNode(v: unknown): v is RawNode {
 }
 
 /**
- * Build a parameterized AQL query that finds nodes whose `name` or `title`
- * property CONTAINS the term. The term and limit are always bound as
- * `$term`/`$limit` — never string-interpolated — so the search is injection-safe.
- *
- * Constrained to what the engine actually supports (verified in
- * `@atlas/query` `eval.ts`/`parser.ts`): the only scalar functions are
- * `id()`/`labels()`/`type()` (no `toLower`/`toString`), and `CONTAINS` is the
- * `text` op which returns `false` unless BOTH operands are strings — so it is
- * case-sensitive and only matches string-valued `name`/`title` props. We bind
- * the term verbatim (trimmed) and OR the two most common name-ish properties;
- * `CONTAINS` uses the full-text index when present and falls back to a scan
- * otherwise (spec §4.5), which is fine for the explorer's interactive cap.
+ * Build a parameterized, case-INSENSITIVE AQL query that finds nodes whose
+ * `name` or `title` CONTAINS the term, ignoring case. The term and limit are
+ * always bound as `$term`/`$limit` (never interpolated) so the search is
+ * injection-safe. Case-insensitivity uses the `lower()` AQL scalar (added in
+ * @atlas/query): `lower(n.name) CONTAINS lower($term)`. `CONTAINS` is the engine
+ * `text` op (string operands only), so non-string props simply don't match.
  */
 export function searchQuery(
   term: string,
@@ -41,7 +35,7 @@ export function searchQuery(
   params: { term: string; limit: number };
 } {
   const query =
-    'MATCH (n) WHERE n.name CONTAINS $term OR n.title CONTAINS $term RETURN n LIMIT $limit';
+    'MATCH (n) WHERE lower(n.name) CONTAINS lower($term) OR lower(n.title) CONTAINS lower($term) RETURN n LIMIT $limit';
   return { query, params: { term: term.trim(), limit } };
 }
 

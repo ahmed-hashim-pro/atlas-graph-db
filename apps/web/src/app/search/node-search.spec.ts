@@ -19,6 +19,14 @@ describe('searchQuery', () => {
   it('trims surrounding whitespace from the bound term', () => {
     expect(searchQuery('  Ada  ', 10).params.term).toBe('Ada');
   });
+
+  it('builds a case-insensitive, parameterized search query', () => {
+    const { query, params } = searchQuery('  AdA  ', 25);
+    expect(query).toContain('lower(n.name) CONTAINS lower($term)');
+    expect(query).toContain('lower(n.title) CONTAINS lower($term)');
+    expect(query).toContain('LIMIT $limit');
+    expect(params).toEqual({ term: 'AdA', limit: 25 });
+  });
 });
 
 describe('toHits', () => {

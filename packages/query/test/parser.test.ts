@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ReadQuery } from '../src/ast.js';
 import { AqlError } from '../src/errors.js';
-import { parseQuery } from '../src/parser.js';
+import { lex } from '../src/lexer.js';
+import { TokenStream, parseExpression, parseQuery } from '../src/parser.js';
+
+/** Tokenize source into a TokenStream the expression parser can consume. */
+function tokenize(src: string): TokenStream {
+  return new TokenStream(lex(src), src);
+}
 
 /** Parse a read query through the statement dispatcher and unwrap the ReadQuery. */
 function read(src: string): { explain: boolean; query: ReadQuery } {
@@ -92,5 +98,16 @@ describe('parseQuery — semantic validation', () => {
     const e = err("MATCH (n:Row {p1: 'a', p1: 'zzz'}) RETURN n");
     expect(e.code).toBe('SEMANTIC_ERROR');
     expect(e.message).toContain('duplicate property "p1"');
+  });
+
+  it('lower() parses as a scalar function and validates', () => {
+    const e = parseExpression(tokenize('lower(n.name)'));
+    expect(e.kind).toBe('call');
+    if (e.kind === 'call') expect(e.func).toBe('lower');
+  });
+
+  it('an unknown function is still rejected (lower allowed, frobnicate not)', () => {
+    expect(() => parseQuery('MATCH (n) RETURN frobnicate(n.name)')).toThrowError(/unknown function/);
+    expect(() => parseQuery('MATCH (n) RETURN lower(n.name)')).not.toThrow();
   });
 });
