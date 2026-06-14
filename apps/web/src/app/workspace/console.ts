@@ -2,11 +2,12 @@ import { Component, inject, input, OnInit, viewChild } from '@angular/core';
 import { makeAqlCompletionSource } from './aql-completions';
 import { AqlEditor } from './aql-editor';
 import { ConsoleStore } from './console.store';
+import { ExplainPlanView } from './explain-plan-view';
 import { ResultsTable } from './results-table';
 
 @Component({
   selector: 'app-console',
-  imports: [AqlEditor, ResultsTable],
+  imports: [AqlEditor, ResultsTable, ExplainPlanView],
   templateUrl: './console.html',
 })
 export class Console implements OnInit {
@@ -21,5 +22,9 @@ export class Console implements OnInit {
 
   run(text: string): void {
     void this.store.run(text);
+  }
+
+  explain(): void {
+    void this.store.explain(this.editor()?.doc() ?? '');
   }
 }

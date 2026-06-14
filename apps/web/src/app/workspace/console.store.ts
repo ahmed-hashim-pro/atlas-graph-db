@@ -2,6 +2,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import type { SchemaSummary } from '@atlas/core';
 import type { QueryResponse } from '@atlas/protocol';
 import { AtlasApi } from '../core/atlas-api';
+import { planToTree, type PlanTreeRow } from './explain-plan';
 
 export type ConsoleTab = 'results' | 'plan' | 'history';
 
@@ -31,6 +32,7 @@ export class ConsoleStore {
   private readonly _running = signal(false);
   private readonly _tab = signal<ConsoleTab>('results');
   private readonly _schema = signal<SchemaSummary | null>(null);
+  private readonly _plan = signal<PlanTreeRow[]>([]);
 
   readonly columns = this._columns.asReadonly();
   readonly rows = this._rows.asReadonly();
@@ -39,6 +41,7 @@ export class ConsoleStore {
   readonly running = this._running.asReadonly();
   readonly tab = this._tab.asReadonly();
   readonly schema = this._schema.asReadonly();
+  readonly plan = this._plan.asReadonly();
   readonly hasResults = computed(() => this._columns().length > 0);
 
   useDatabase(name: string): void {
@@ -76,6 +79,24 @@ export class ConsoleStore {
       this._rows.set([]);
       this._stats.set(null);
       return null;
+    } finally {
+      this._running.set(false);
+    }
+  }
+
+  async explain(query: string): Promise<void> {
+    const text = query.trim();
+    if (!text) return;
+    this._running.set(true);
+    this._error.set(null);
+    try {
+      const res = await this.api.database(this.dbName).query(`EXPLAIN ${text}`, {});
+      const planCell = res.rows[0]?.[0];
+      this._plan.set(planToTree(planCell));
+      this._tab.set('plan');
+    } catch (e) {
+      this._error.set(toConsoleError(e));
+      this._plan.set([]);
     } finally {
       this._running.set(false);
     }

@@ -22,6 +22,7 @@
     <button role="tab" [attr.aria-selected]="store.tab() === 'results'" (click)="store.setTab('results')">Results</button>
     <button role="tab" [attr.aria-selected]="store.tab() === 'plan'" (click)="store.setTab('plan')">EXPLAIN Plan</button>
     <button role="tab" [attr.aria-selected]="store.tab() === 'history'" (click)="store.setTab('history')">History</button>
+    <button class="explain-btn" (click)="explain()">EXPLAIN</button>
   </nav>
 
   <div class="tab-panel" role="tabpanel">
@@ -31,6 +32,9 @@
           <p class="stats">{{ store.rows().length }} rows · {{ s.elapsedMs }} ms</p>
         }
         <app-results-table [columns]="store.columns()" [rows]="store.rows()" />
+      }
+      @case ('plan') {
+        <app-explain-plan-view [rows]="store.plan()" />
       }
       @default {
         <p class="empty">Tab arrives in a later task.</p>
