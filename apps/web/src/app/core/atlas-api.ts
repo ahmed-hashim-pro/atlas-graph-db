@@ -2,12 +2,14 @@ import { Injectable } from '@angular/core';
 import {
   connect,
   type AtlasClient,
+  type AuditEntry,
   type CreatedToken,
   type Database,
   type DbSummary,
   type ImportCsvBody,
   type SeedResult,
   type TokenSummary,
+  type UserSummary,
 } from '@atlas/client';
 import type { DbInfo, ImportReq, ImportResult, RoleName, UserInfo } from '@atlas/protocol';
 import { environment } from '../../environments/environment';
@@ -47,6 +49,9 @@ export class AtlasApi {
   getDatabase(name: string): Promise<DbInfo> {
     return this.client.getDatabase(name);
   }
+  patchDatabase(name: string, patch: { description?: string }): Promise<void> {
+    return this.client.patchDatabase(name, patch);
+  }
   createToken(name: string): Promise<CreatedToken> {
     return this.client.createToken(name);
   }
@@ -61,6 +66,24 @@ export class AtlasApi {
   }
   revokeRole(name: string, username: string): Promise<void> {
     return this.client.revokeRole(name, username);
+  }
+  listUsers(): Promise<UserSummary[]> {
+    return this.client.listUsers();
+  }
+  createUser(username: string, password: string, isAdmin?: boolean): Promise<void> {
+    return this.client.createUser(username, password, isAdmin);
+  }
+  updateUser(username: string, patch: { isAdmin: boolean }): Promise<void> {
+    return this.client.updateUser(username, patch);
+  }
+  resetUserPassword(username: string, password: string): Promise<void> {
+    return this.client.resetUserPassword(username, password);
+  }
+  deleteUser(username: string): Promise<void> {
+    return this.client.deleteUser(username);
+  }
+  listAudit(limit?: number): Promise<AuditEntry[]> {
+    return this.client.listAudit(limit);
   }
   import(name: string, body: ImportReq): Promise<ImportResult> {
     return this.client.import(name, body);

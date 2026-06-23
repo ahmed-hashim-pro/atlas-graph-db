@@ -133,7 +133,14 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
       const parsed = ImportReq.parse(req.body);
       imp = { nodes: parsed.nodes, edges: parsed.edges, atomic: parsed.atomic };
     }
-    return runImport(db, imp);
+    const result = await runImport(db, imp);
+    await ctx.catalog.recordAudit({
+      username: req.principal!.username,
+      action: 'import',
+      target: name,
+      detail: `nodes=${result.committed.nodes} edges=${result.committed.edges}`,
+    });
+    return result;
   });
 
   app.get('/api/db/:name/export', auth, async (req) => {
@@ -163,6 +170,12 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
       throw new HttpError(404, 'NOT_FOUND', `unknown dataset "${dataset}"`);
     const db = await ctx.manager.get(name);
     await loadDataset(db, scienceHistory());
+    await ctx.catalog.recordAudit({
+      username: req.principal!.username,
+      action: 'seed',
+      target: name,
+      detail: dataset,
+    });
     return { committed: { nodes: db.stats().nodeCount, edges: db.stats().edgeCount } };
   });
 }

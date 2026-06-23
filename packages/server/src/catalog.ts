@@ -1,5 +1,5 @@
 import { openDatabase, type AtlasDatabase, type NodeId } from '@atlas/core';
-import type { RoleName } from '@atlas/protocol';
+import type { AuditEntry, RoleName, UserSummary } from '@atlas/protocol';
 import { randomBytes } from 'node:crypto';
 
 export interface UserRow {
@@ -19,7 +19,15 @@ const EDGE_ROLE: Record<string, RoleName> = { OWNER: 'owner', EDITOR: 'editor', 
 
 /** Catalog persisted as a dedicated Atlas database (the platform dogfoods its engine). */
 export class CatalogService {
-  private constructor(private readonly db: AtlasDatabase) {}
+  /** Monotonic audit sequence, seeded at open() from the current max and incremented per record. */
+  #auditSeq: number;
+
+  private constructor(
+    private readonly db: AtlasDatabase,
+    auditSeq: number,
+  ) {
+    this.#auditSeq = auditSeq;
+  }
 
   static async open(dir: string): Promise<CatalogService> {
     const db = await openDatabase(dir);
@@ -34,7 +42,14 @@ export class CatalogService {
     await ensure('unique', 'Database', 'name');
     await ensure('unique', 'Token', 'tokenId');
     await ensure('unique', 'Session', 'sid');
-    return new CatalogService(db);
+    await ensure('unique', 'Audit', 'seq');
+    // Seed the in-memory seq counter from the highest persisted audit seq (0 if none).
+    let maxSeq = 0;
+    for (const n of db.nodesByLabel('Audit')) {
+      const seq = Number(n.props.seq);
+      if (seq > maxSeq) maxSeq = seq;
+    }
+    return new CatalogService(db, maxSeq);
   }
 
   close(): Promise<void> {
@@ -61,6 +76,78 @@ export class CatalogService {
   async anyUserExists(): Promise<boolean> {
     for (const _ of this.db.nodesByLabel('User')) return true;
     return false;
+  }
+
+  /** All users (no password hashes), sorted by username — backs the admin user list. */
+  async listUsers(): Promise<UserSummary[]> {
+    return [...this.db.nodesByLabel('User')]
+      .map((n) => ({
+        username: String(n.props.username),
+        isAdmin: n.props.isAdmin === true,
+        createdAt: String(n.props.createdAt ?? ''),
+      }))
+      .sort((a, b) => a.username.localeCompare(b.username));
+  }
+
+  async deleteUser(username: string): Promise<void> {
+    await this.deleteSessionsForUser(username);
+    const user = this.userNode(username);
+    if (!user) return;
+    await this.db.transact((tx) => tx.deleteNode(user.id, { detach: true }));
+  }
+
+  async setUserAdmin(username: string, isAdmin: boolean): Promise<void> {
+    const user = this.userNode(username);
+    if (!user) return;
+    await this.db.transact((tx) => tx.setNodeProps(user.id, { isAdmin }));
+  }
+
+  /** Replace a user's password hash and revoke all their sessions (a credential change). */
+  async resetPassword(username: string, passwordHash: string): Promise<void> {
+    const user = this.userNode(username);
+    if (!user) return;
+    await this.db.transact((tx) => tx.setNodeProps(user.id, { passwordHash }));
+    await this.deleteSessionsForUser(username);
+  }
+
+  // ---- audit log (write-op trail; stored as catalog nodes) ----
+  /** Append an audit entry with a real timestamp and the next monotonic seq. */
+  async recordAudit(entry: {
+    username: string;
+    action: string;
+    target: string;
+    detail?: string;
+  }): Promise<void> {
+    const seq = ++this.#auditSeq;
+    const props: Record<string, string | number> = {
+      seq,
+      at: new Date().toISOString(),
+      username: entry.username,
+      action: entry.action,
+      target: entry.target,
+    };
+    if (entry.detail !== undefined) props.detail = entry.detail;
+    await this.db.transact((tx) => {
+      tx.createNode(['Audit'], props);
+    });
+  }
+
+  /** The most recent audit entries (highest seq first), capped at `limit`. */
+  async listAudit(limit: number): Promise<AuditEntry[]> {
+    return [...this.db.nodesByLabel('Audit')]
+      .map((n) => {
+        const e: AuditEntry = {
+          seq: Number(n.props.seq),
+          at: String(n.props.at),
+          username: String(n.props.username),
+          action: String(n.props.action),
+          target: String(n.props.target),
+        };
+        if (n.props.detail !== undefined) e.detail = String(n.props.detail);
+        return e;
+      })
+      .sort((a, b) => b.seq - a.seq)
+      .slice(0, limit);
   }
 
   // ---- databases + roles ----
