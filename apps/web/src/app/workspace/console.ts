@@ -1,6 +1,6 @@
-import { Component, inject, input, OnInit, viewChild } from '@angular/core';
+import { Component, computed, inject, input, OnInit, viewChild } from '@angular/core';
 import { makeAqlCompletionSource } from './aql-completions';
-import { AqlEditor } from './aql-editor';
+import { AqlEditor, type AqlErrorRange } from './aql-editor';
 import { ConsoleStore } from './console.store';
 import { ExplainPlanView } from './explain-plan-view';
 import { HistoryStore } from './history.store';
@@ -17,6 +17,17 @@ export class Console implements OnInit {
   readonly history = inject(HistoryStore);
   readonly completionSource = makeAqlCompletionSource(() => this.store.schema());
   private readonly editor = viewChild(AqlEditor);
+
+  /**
+   * The current error's 1-based position to underline in the editor, derived from
+   * the console store's error signal. `null` when there is no error or no position,
+   * which clears the squiggle.
+   */
+  readonly errorRange = computed<AqlErrorRange | null>(() => {
+    const err = this.store.error();
+    if (err?.line && err.column) return { line: err.line, column: err.column };
+    return null;
+  });
 
   ngOnInit(): void {
     this.store.useDatabase(this.database());

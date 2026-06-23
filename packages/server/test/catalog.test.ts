@@ -28,6 +28,110 @@ describe('users', () => {
   });
 });
 
+describe('user administration', () => {
+  it('lists users sorted by username with summary fields', async () => {
+    await cat.createUser('bob', 'h', false);
+    await cat.createUser('ada', 'h', true);
+    const users = await cat.listUsers();
+    expect(users.map((u) => u.username)).toEqual(['ada', 'bob']);
+    expect(users[0]).toMatchObject({ username: 'ada', isAdmin: true });
+    expect(typeof users[0]!.createdAt).toBe('string');
+    expect(JSON.stringify(users)).not.toContain('passwordHash');
+  });
+
+  it('sets and clears the admin flag', async () => {
+    await cat.createUser('root', 'h', true); // keep an admin so demote is allowed
+    await cat.createUser('ada', 'h', false);
+    await cat.setUserAdmin('ada', true);
+    expect((await cat.findUser('ada'))?.isAdmin).toBe(true);
+    await cat.setUserAdmin('ada', false);
+    expect((await cat.findUser('ada'))?.isAdmin).toBe(false);
+  });
+
+  it('refuses to demote or delete the last admin', async () => {
+    await cat.createUser('root', 'h', true);
+    await expect(cat.setUserAdmin('root', false)).rejects.toThrow(/last admin/);
+    await expect(cat.deleteUser('root')).rejects.toThrow(/last admin/);
+    expect((await cat.findUser('root'))?.isAdmin).toBe(true);
+  });
+
+  it('atomically keeps an admin under concurrent last-admin demotes', async () => {
+    await cat.createUser('root', 'h', true);
+    await cat.createUser('ada', 'h', true);
+    // Two concurrent demotes of the two distinct admins: the count-and-mutate
+    // runs inside the single-writer queue, so the second sees one admin left and
+    // is rejected — exactly one succeeds, an admin always remains.
+    const results = await Promise.allSettled([
+      cat.setUserAdmin('root', false),
+      cat.setUserAdmin('ada', false),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect((await cat.listUsers()).filter((u) => u.isAdmin)).toHaveLength(1);
+  });
+
+  it('atomically keeps an admin under concurrent last-admin deletes', async () => {
+    await cat.createUser('root', 'h', true);
+    await cat.createUser('ada', 'h', true);
+    const results = await Promise.allSettled([cat.deleteUser('root'), cat.deleteUser('ada')]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect((await cat.listUsers()).filter((u) => u.isAdmin)).toHaveLength(1);
+  });
+
+  it('resets a password and kills existing sessions', async () => {
+    await cat.createUser('ada', 'h', false);
+    const sid = await cat.createSession('ada');
+    await cat.resetPassword('ada', 'newhash');
+    expect((await cat.findUser('ada'))?.passwordHash).toBe('newhash');
+    expect(await cat.findSessionUser(sid)).toBeNull();
+  });
+
+  it('deletes a user and their sessions', async () => {
+    await cat.createUser('ada', 'h', false);
+    const sid = await cat.createSession('ada');
+    await cat.deleteUser('ada');
+    expect(await cat.findUser('ada')).toBeNull();
+    expect(await cat.findSessionUser(sid)).toBeNull();
+  });
+});
+
+describe('audit log', () => {
+  it('records entries and lists them newest-first', async () => {
+    await cat.recordAudit({ username: 'ada', action: 'db:create', target: 'kb' });
+    await cat.recordAudit({ username: 'ada', action: 'node:create', target: 'kb', detail: '#1' });
+    const entries = await cat.listAudit(100);
+    expect(entries.map((e) => e.seq)).toEqual([2, 1]);
+    expect(entries[0]).toMatchObject({ action: 'node:create', target: 'kb', detail: '#1' });
+    expect(typeof entries[0]!.at).toBe('string');
+  });
+
+  it('records a real timestamp (not the fixed nowIso constant)', async () => {
+    await cat.recordAudit({ username: 'ada', action: 'db:create', target: 'kb' });
+    const [entry] = await cat.listAudit(1);
+    expect(entry!.at).not.toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('caps the result at the requested limit', async () => {
+    for (let i = 0; i < 5; i++)
+      await cat.recordAudit({ username: 'ada', action: 'node:create', target: 'kb' });
+    expect(await cat.listAudit(2)).toHaveLength(2);
+  });
+
+  it('continues the seq counter across reopen without collision', async () => {
+    await cat.recordAudit({ username: 'ada', action: 'db:create', target: 'kb' });
+    await cat.recordAudit({ username: 'ada', action: 'db:create', target: 'kb2' });
+    await cat.close();
+    const c2 = await CatalogService.open(join(dir, '_catalog'));
+    await c2.recordAudit({ username: 'ada', action: 'db:create', target: 'kb3' });
+    const seqs = (await c2.listAudit(100)).map((e) => e.seq);
+    expect(seqs).toEqual([3, 2, 1]); // monotonic, no collision after reopen
+    expect(new Set(seqs).size).toBe(seqs.length);
+    await c2.close();
+    cat = await CatalogService.open(join(dir, '_catalog')); // for afterEach close
+  });
+});
+
 describe('databases + roles', () => {
   it('records databases, grants roles, and resolves a user role', async () => {
     await cat.createUser('ada', 'h', false);

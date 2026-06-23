@@ -1,0 +1,51 @@
+<section class="admin-panel">
+  <h2>Audit log</h2>
+  <p class="muted">Write operations across the server, most recent first.</p>
+
+  <form class="audit-controls" (ngSubmit)="refresh()">
+    <label for="audit-limit">Show</label>
+    <input
+      id="audit-limit"
+      type="number"
+      min="1"
+      max="1000"
+      [ngModel]="limitInput()"
+      (ngModelChange)="limitInput.set($event)"
+      name="audit-limit"
+    />
+    <button type="submit">Refresh</button>
+  </form>
+
+  @if (store.error()) {
+    <p class="error" role="alert">{{ store.error() }}</p>
+  }
+
+  <table class="audit-table">
+    <thead>
+      <tr>
+        <th scope="col">Seq</th>
+        <th scope="col">At</th>
+        <th scope="col">User</th>
+        <th scope="col">Action</th>
+        <th scope="col">Target</th>
+        <th scope="col">Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (e of store.entries(); track e.seq) {
+        <tr class="audit-row">
+          <td class="audit-seq">{{ e.seq }}</td>
+          <td class="audit-at">{{ e.at }}</td>
+          <td class="audit-user">{{ e.username }}</td>
+          <td class="audit-action">{{ e.action }}</td>
+          <td class="audit-target">{{ e.target }}</td>
+          <td class="audit-detail">{{ e.detail ?? '—' }}</td>
+        </tr>
+      } @empty {
+        <tr>
+          <td class="muted" colspan="6">No audit entries yet.</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>

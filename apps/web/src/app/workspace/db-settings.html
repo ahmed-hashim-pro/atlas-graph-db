@@ -1,0 +1,44 @@
+<section class="db-settings" aria-label="Database settings">
+  <h2>Database settings</h2>
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+
+  @if (info(); as db) {
+    <form class="settings-form" (ngSubmit)="save()">
+      <label for="db-description">Description</label>
+      <textarea
+        id="db-description"
+        name="db-description"
+        rows="3"
+        [ngModel]="description()"
+        (ngModelChange)="description.set($event)"
+        (input)="saved.set(false)"
+      ></textarea>
+
+      <button type="submit" [disabled]="saving()">Save</button>
+
+      @if (saved()) {
+        <p class="saved" role="status">Saved.</p>
+      }
+    </form>
+
+    <dl class="settings-meta">
+      <dt>Your role</dt>
+      <dd>{{ db.role ?? 'none' }}</dd>
+      <dt>Owners</dt>
+      <dd>
+        @if (db.owners.length === 0) {
+          <span class="muted">No owners.</span>
+        } @else {
+          <ul class="owners">
+            @for (owner of db.owners; track owner) {
+              <li>{{ owner }}</li>
+            }
+          </ul>
+        }
+      </dd>
+    </dl>
+  }
+</section>

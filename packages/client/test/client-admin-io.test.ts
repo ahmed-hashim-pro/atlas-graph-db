@@ -95,6 +95,72 @@ describe('@atlas/client roles', () => {
   });
 });
 
+describe('@atlas/client user administration + audit', () => {
+  let adminDir: string;
+  let adminApp: FastifyInstance;
+  let adminUrl: string;
+
+  beforeEach(async () => {
+    adminDir = await mkdtemp(join(tmpdir(), 'atlas-client-useradmin-'));
+    adminApp = await buildServer(
+      loadConfig({
+        ATLAS_DATA_DIR: adminDir,
+        ATLAS_SECRET: 's'.repeat(32),
+        ATLAS_ADMIN_USER: 'root',
+        ATLAS_ADMIN_PASSWORD: 'rootpass1',
+      }),
+    );
+    await adminApp.listen({ port: 0, host: '127.0.0.1' });
+    const addr = adminApp.server.address();
+    adminUrl = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;
+  });
+  afterEach(async () => {
+    await adminApp.close();
+    await rm(adminDir, { recursive: true, force: true });
+  });
+
+  it('admin lists, creates, promotes, resets, and deletes users; non-admin is rejected', async () => {
+    const admin = connect(adminUrl, { mode: 'cookie' });
+    await admin.login('root', 'rootpass1');
+
+    await admin.createUser('ada', 'secret12');
+    const users = await admin.listUsers();
+    expect(users.map((u) => u.username)).toContain('ada');
+
+    await admin.updateUser('ada', { isAdmin: true });
+    expect((await admin.listUsers()).find((u) => u.username === 'ada')?.isAdmin).toBe(true);
+
+    await admin.resetUserPassword('ada', 'brandnew1');
+    // ada can log in with the new password.
+    const ada = connect(adminUrl, { mode: 'cookie' });
+    expect(await ada.login('ada', 'brandnew1')).toMatchObject({ username: 'ada' });
+
+    await admin.deleteUser('ada');
+    expect((await admin.listUsers()).map((u) => u.username)).not.toContain('ada');
+
+    // A non-admin gets 403.
+    const bobC = connect(adminUrl, { mode: 'cookie' });
+    await bobC.register('bob', 'secret12');
+    await bobC.login('bob', 'secret12');
+    await expect(bobC.listUsers()).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('admin reads the audit log of write operations', async () => {
+    const admin = connect(adminUrl, { mode: 'cookie' });
+    await admin.login('root', 'rootpass1');
+    await admin.createDatabase('kb');
+    await admin.patchDatabase('kb', { description: 'knowledge base' });
+
+    const entries = await admin.listAudit(50);
+    const actions = entries.map((e) => e.action);
+    expect(actions).toContain('db:create');
+    expect(actions).toContain('db:patch');
+    // Newest first.
+    const seqs = entries.map((e) => e.seq);
+    expect([...seqs].sort((a, b) => b - a)).toEqual(seqs);
+  });
+});
+
 describe('@atlas/client import', () => {
   it('imports JSON nodes+edges and returns committed counts + an idMap', async () => {
     const client = connect(url, { mode: 'cookie' });

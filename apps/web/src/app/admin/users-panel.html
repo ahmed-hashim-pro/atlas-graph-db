@@ -1,0 +1,79 @@
+<section class="admin-panel">
+  <h2>Users</h2>
+  <p class="muted">Global user accounts and server-admin privileges.</p>
+
+  <form class="create" (ngSubmit)="create()">
+    <label class="sr-only" for="user-name">Username</label>
+    <input
+      id="user-name"
+      placeholder="username"
+      [ngModel]="newUsername()"
+      (ngModelChange)="newUsername.set($event)"
+      name="user-name"
+    />
+    <label class="sr-only" for="user-password">Password</label>
+    <input
+      id="user-password"
+      type="password"
+      placeholder="password (min 8)"
+      [ngModel]="newPassword()"
+      (ngModelChange)="newPassword.set($event)"
+      name="user-password"
+    />
+    <label class="admin-check">
+      <input
+        type="checkbox"
+        [ngModel]="newIsAdmin()"
+        (ngModelChange)="newIsAdmin.set($event)"
+        name="user-admin"
+      />
+      Admin
+    </label>
+    <button type="submit" [disabled]="!newUsername().trim() || newPassword().length < 8">
+      Create user
+    </button>
+  </form>
+
+  @if (store.error()) {
+    <p class="error" role="alert">{{ store.error() }}</p>
+  }
+
+  <table class="user-table">
+    <thead>
+      <tr>
+        <th scope="col">Username</th>
+        <th scope="col">Role</th>
+        <th scope="col">Created</th>
+        <th scope="col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (u of store.users(); track u.username) {
+        <tr class="user-row">
+          <td class="user-name">{{ u.username }}</td>
+          <td>
+            @if (u.isAdmin) {
+              <span class="role role-owner">admin</span>
+            } @else {
+              <span class="role">user</span>
+            }
+          </td>
+          <td class="user-created">{{ u.createdAt }}</td>
+          <td class="user-actions">
+            @if (u.isAdmin) {
+              <button type="button" (click)="store.setAdmin(u.username, false)">Demote</button>
+            } @else {
+              <button type="button" (click)="store.setAdmin(u.username, true)">Promote</button>
+            }
+            <button type="button" (click)="resetPassword(u.username)">Reset password</button>
+            <button type="button" class="danger" (click)="remove(u.username)">Delete</button>
+          </td>
+        </tr>
+      } @empty {
+        <tr>
+          <td class="muted" colspan="4">No users yet.</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</section>
