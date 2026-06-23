@@ -6,6 +6,7 @@ import { hashPassword } from './crypto.js';
 import { DatabaseManager } from './db-manager.js';
 import { toProblem } from './errors.js';
 import { MetricsRegistry } from './metrics.js';
+import { registerAuditRoutes } from './routes/audit.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerDatabaseRoutes } from './routes/databases.js';
 import { registerDataRoutes } from './routes/data.js';
@@ -13,6 +14,7 @@ import { registerIoRoutes } from './routes/io.js';
 import { registerMetricsRoutes } from './routes/metrics.js';
 import { registerQueryRoutes } from './routes/query.js';
 import { registerTokenRoutes } from './routes/tokens.js';
+import { registerUserRoutes } from './routes/users.js';
 import { registerWsRoutes } from './routes/ws.js';
 import { registerRateLimit, registerSecurityHeaders } from './security.js';
 
@@ -58,6 +60,8 @@ export async function buildServer(config: ServerConfig): Promise<FastifyInstance
   await registerMetricsRoutes(app, ctx);
   await registerQueryRoutes(app, ctx);
   await registerTokenRoutes(app, ctx);
+  await registerUserRoutes(app, ctx);
+  await registerAuditRoutes(app, ctx);
   await registerWsRoutes(app, ctx);
 
   // Not-found handling: when a static SPA dir is configured, serve it with an

@@ -88,20 +88,16 @@ export class AtlasDatabase {
 
     if (state.snapshotSeq !== null) {
       const snap = decodeSnapshot(await readFile(snapshotPath(dir, state.snapshotSeq)));
-      for (const n of snap.nodes)
-        store.applyOp({ op: 'createNode', id: n.id, labels: n.labels, props: n.props });
-      for (const e of snap.edges)
-        store.applyOp({
-          op: 'createEdge',
-          id: e.id,
-          type: e.type,
-          from: e.from,
-          to: e.to,
-          props: e.props,
-        });
+      // Trusted bulk load: snapshot records are internally consistent, so this
+      // skips applyOp's per-op index/schema hooks, existence validation, and
+      // defensive clones (edge replay is the recovery hot path — spec §2). The
+      // schema read-model is restored from the snapshot when present, else
+      // rebuilt lazily on first use.
+      store.bulkLoad(snap.nodes, snap.edges, snap.schema);
       lastTxId = snap.lastTxId;
       maxNodeId = snap.nextNodeId - 1;
       maxEdgeId = snap.nextEdgeId - 1;
+      // Index defs backfill from the now-populated store (rare; usually none).
       for (const def of snap.indexes ?? []) store.applyOp({ op: 'createIndex', def });
     }
 

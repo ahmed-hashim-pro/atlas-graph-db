@@ -1,5 +1,52 @@
 # Changelog
 
+## 1.1.1 — 2026-06-24
+
+Capacity-point release gate signed off. No API changes.
+
+### Engine (`@atlas/core`)
+
+- **Recovery performance**: the spec §2 capacity-point gate (1M nodes / 5M edges)
+  now passes — full recovery dropped from 39 s to **16.2 s** (budget < 30 s).
+  Recovery uses a trusted `GraphStore.bulkLoad` fast path (skips per-op index/
+  schema hooks, validation, and defensive clones that only the WAL-replay / tx
+  path needs), and the observed-schema summary is persisted in the snapshot and
+  rehydrated in O(schema) rather than by rescanning the graph. WAL replay and
+  live-write paths are unchanged. Snapshots gain an optional `schema` field;
+  pre-1.1 snapshots without it fall back to a lazy schema rebuild on first use.
+- All four §2 budgets met at the capacity point (heap 2926 MB, 2-hop p95 0.10 ms,
+  268k writes/s, recovery 16.2 s) — see `docs/BENCHMARKS.md`.
+
+## 1.1.0 — 2026-06-23
+
+Backlog features on top of v1.0.0; engine on-disk format unchanged (the new
+audit log and user store reuse the catalog, dogfooding the engine).
+
+### Server (`@atlas/server`)
+
+- **Global user management** (server-admin only): `GET/POST /api/users`,
+  `PATCH /api/users/:username` (admin flag), `POST /api/users/:username/password`
+  (reset; revokes that user's sessions), `DELETE /api/users/:username`. Last-admin
+  and self-delete lockouts are enforced atomically inside the write queue (no
+  TOCTOU race under concurrent admin changes).
+- **Audit log of write operations**: `GET /api/audit?limit=` returns recent
+  entries (newest first) covering node/edge writes, import/seed, database and role
+  changes, write queries, and user admin. Recording is best-effort — an
+  audit-store failure never fails the underlying committed write.
+
+### Client (`@atlas/client`)
+
+- SDK methods: `listUsers`, `createUser`, `updateUser`, `resetUserPassword`,
+  `deleteUser`, `listAudit`, `patchDatabase`.
+
+### Explorer (`apps/web`)
+
+- Admin: **Users** panel (list/create/promote-demote/reset-password/delete) and
+  an **Audit log** viewer.
+- Workspace: editable **database-settings** form (description) and an inline
+  **AQL error squiggle** in the console (wavy underline over the offending range,
+  complementing the existing caret banner).
+
 ## 1.0.0 — 2026-06-15
 
 First production release of Atlas: an embedded graph engine, AQL query language,

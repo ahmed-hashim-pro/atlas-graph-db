@@ -61,6 +61,16 @@ export function requireAuth(catalog: CatalogService) {
   };
 }
 
+/** preHandler: requires an authenticated server admin, else 401 (unauth) then 403 (non-admin). */
+export function requireAdmin(catalog: CatalogService) {
+  return async (req: FastifyRequest): Promise<void> => {
+    const principal = await authenticate(req, catalog);
+    if (!principal) throw new HttpError(401, 'UNAUTHENTICATED', 'authentication required');
+    if (!principal.isAdmin) throw new HttpError(403, 'FORBIDDEN', 'admin privileges required');
+    req.principal = principal;
+  };
+}
+
 /** Permission-matrix capability check on a database (spec §6.2). */
 export type Capability = 'read' | 'write' | 'ddl' | 'admin-db' | 'delete-db';
 

@@ -1,7 +1,7 @@
 import { AtlasError } from './errors.js';
 import { IndexRegistry } from './index/registry.js';
 import { Interner } from './interner.js';
-import { SchemaTracker } from './schema.js';
+import { SchemaTracker, type SchemaSummary } from './schema.js';
 import type { CommittedBatch, EdgeId, EdgeRecord, NodeId, NodeRecord, Op } from './types.js';
 
 type Adjacency = Map<NodeId, Map<number, Set<EdgeId>>>;
@@ -44,6 +44,40 @@ export class GraphStore {
 
   applyBatch(batch: CommittedBatch): void {
     for (const op of batch.ops) this.applyOp(op);
+  }
+
+  /**
+   * Trusted bulk load of a decoded snapshot — the recovery fast path (spec §2).
+   * The records come straight from snapshot decode (fresh, owned, internally
+   * consistent), so this skips the per-op index/schema hooks, existence
+   * validation, and the defensive prop/label clones that applyOp performs for
+   * the general (WAL replay / tx) path, and builds nodes, edges, the label
+   * index, and both adjacency directions directly. The schema read-model is
+   * restored from the persisted summary when present (O(schema), no graph
+   * rescan); otherwise it is marked for a lazy rebuild on first use. Index
+   * postings are NOT built here — callers apply index defs afterward, which
+   * backfill from the populated store. Must only be called on an empty store.
+   */
+  bulkLoad(nodes: Iterable<NodeRecord>, edges: Iterable<EdgeRecord>, schema?: SchemaSummary): void {
+    for (const n of nodes) {
+      this.nodes.set(n.id, n);
+      for (const label of n.labels) {
+        let set = this.byLabel.get(label);
+        if (!set) {
+          set = new Set();
+          this.byLabel.set(label, set);
+        }
+        set.add(n.id);
+      }
+    }
+    for (const e of edges) {
+      this.edges.set(e.id, e);
+      const typeId = this.types.intern(e.type);
+      bucket(this.outAdj, e.from, typeId).add(e.id);
+      bucket(this.inAdj, e.to, typeId).add(e.id);
+    }
+    if (schema) this.schema.loadSummary(schema);
+    else this.schema.markStale(this);
   }
 
   /**

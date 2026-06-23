@@ -2,6 +2,7 @@
   <app-aql-editor
     [value]="'MATCH (n) RETURN n LIMIT 25'"
     [completionSource]="completionSource"
+    [errorRange]="errorRange()"
     (run)="run($event)"
   />
 

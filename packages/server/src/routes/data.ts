@@ -21,6 +21,17 @@ async function dbFor(
   return ctx.manager.get(name);
 }
 
+/** Record a data-write audit entry (db name as target, the affected id as detail). */
+function auditWrite(
+  ctx: AppContext,
+  req: FastifyRequest,
+  action: string,
+  detail: string,
+): Promise<void> {
+  const target = (req.params as { name: string }).name;
+  return ctx.catalog.tryRecordAudit({ username: req.principal!.username, action, target, detail });
+}
+
 export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
   const auth = { preHandler: requireAuth(ctx.catalog) };
 
@@ -38,6 +49,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     await db.transact((tx) => {
       id = tx.createNode(body.labels, body.properties);
     });
+    await auditWrite(ctx, req, 'node:create', `#${id}`);
     void reply.status(201);
     return { id };
   });
@@ -48,6 +60,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     if (!db.getNode(id)) throw new HttpError(404, 'NOT_FOUND', 'node not found');
     const body = NodePatchReq.parse(req.body);
     await db.transact((tx) => tx.setNodeProps(id, body.set, body.remove));
+    await auditWrite(ctx, req, 'node:patch', `#${id}`);
     const node = db.getNode(id)!;
     return { id: node.id, labels: node.labels, properties: node.props };
   });
@@ -58,6 +71,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     if (!db.getNode(id)) throw new HttpError(404, 'NOT_FOUND', 'node not found');
     const detach = (req.query as { detach?: string }).detach === 'true';
     await db.transact((tx) => tx.deleteNode(id, { detach }));
+    await auditWrite(ctx, req, 'node:delete', `#${id}`);
     void reply.status(204);
   });
 
@@ -77,6 +91,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     await db.transact((tx) => {
       id = tx.createEdge(body.type, body.from, body.to, body.properties);
     });
+    await auditWrite(ctx, req, 'edge:create', `#${id}`);
     void reply.status(201);
     return { id };
   });
@@ -87,6 +102,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     if (!db.getEdge(id)) throw new HttpError(404, 'NOT_FOUND', 'edge not found');
     const body = NodePatchReq.parse(req.body);
     await db.transact((tx) => tx.setEdgeProps(id, body.set, body.remove));
+    await auditWrite(ctx, req, 'edge:patch', `#${id}`);
     const e = db.getEdge(id)!;
     return { id: e.id, type: e.type, from: e.from, to: e.to, properties: e.props };
   });
@@ -96,6 +112,7 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
     const id = parseId((req.params as { id: string }).id);
     if (!db.getEdge(id)) throw new HttpError(404, 'NOT_FOUND', 'edge not found');
     await db.transact((tx) => tx.deleteEdge(id));
+    await auditWrite(ctx, req, 'edge:delete', `#${id}`);
     void reply.status(204);
   });
 }

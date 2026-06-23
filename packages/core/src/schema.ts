@@ -63,8 +63,67 @@ interface EdgeTypeStats {
 export class SchemaTracker {
   private readonly labels = new Map<string, LabelStats>();
   private readonly edgeTypes = new Map<string, EdgeTypeStats>();
+  /**
+   * When set (after a snapshot bulk-load without a persisted schema), the
+   * tracker is empty and must be rebuilt from this store before its first
+   * schema-relevant read or write. Keeps recovery O(graph) free of schema work.
+   */
+  private dirtyStore: GraphStore | null = null;
+
+  /** Defer schema construction: rebuild lazily from `store` on first use. */
+  markStale(store: GraphStore): void {
+    this.dirtyStore = store;
+  }
+
+  /** Restore the tracker's internal counters from a persisted summary (O(schema)). */
+  loadSummary(s: SchemaSummary): void {
+    this.dirtyStore = null;
+    this.labels.clear();
+    this.edgeTypes.clear();
+    for (const l of s.labels) {
+      const stats: LabelStats = { count: l.count, properties: new Map() };
+      for (const p of l.properties) {
+        const c = new Counter<string>();
+        for (const [typeName, n] of Object.entries(p.types)) c.map.set(typeName, n);
+        stats.properties.set(p.property, c);
+      }
+      this.labels.set(l.label, stats);
+    }
+    for (const et of s.edgeTypes) {
+      const from = new Counter<string>();
+      for (const [k, n] of Object.entries(et.from)) from.map.set(k, n);
+      const to = new Counter<string>();
+      for (const [k, n] of Object.entries(et.to)) to.map.set(k, n);
+      this.edgeTypes.set(et.type, { count: et.count, from, to });
+    }
+  }
+
+  /** Rebuild from the deferred store on first schema-relevant access (idempotent). */
+  private ensureFresh(): void {
+    const store = this.dirtyStore;
+    if (!store) return;
+    this.dirtyStore = null; // clear first so the replay below does not recurse
+    this.labels.clear();
+    this.edgeTypes.clear();
+    for (const n of store.nodes.values())
+      this.beforeApply({ op: 'createNode', id: n.id, labels: n.labels, props: n.props }, store);
+    for (const e of store.edges.values())
+      this.beforeApply(
+        { op: 'createEdge', id: e.id, type: e.type, from: e.from, to: e.to, props: e.props },
+        store,
+      );
+  }
 
   beforeApply(op: Op, store: GraphStore): void {
+    // Index DDL and edge-prop changes never touch the schema, so they must not
+    // force a deferred rebuild; every other op reads/writes schema state.
+    if (
+      this.dirtyStore &&
+      op.op !== 'createIndex' &&
+      op.op !== 'dropIndex' &&
+      op.op !== 'setEdgeProps'
+    )
+      this.ensureFresh();
     switch (op.op) {
       case 'createNode': {
         for (const label of op.labels) {
@@ -135,6 +194,7 @@ export class SchemaTracker {
   }
 
   summary(): SchemaSummary {
+    this.ensureFresh();
     return {
       labels: [...this.labels.entries()]
         .sort(([a], [b]) => (a < b ? -1 : 1))

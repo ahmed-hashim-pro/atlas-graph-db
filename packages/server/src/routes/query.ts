@@ -47,6 +47,13 @@ export async function registerQueryRoutes(app: FastifyInstance, ctx: AppContext)
       });
       ok = true;
       ctx.metrics.queryLatencyMs.observe(result.stats.elapsedMs);
+      // Audit only successful write statements (never reads); after the mutation commits.
+      if (cap === 'write')
+        await ctx.catalog.tryRecordAudit({
+          username: req.principal!.username,
+          action: 'query:write',
+          target: name,
+        });
       return result;
     } finally {
       ctx.metrics.queriesTotal.inc();

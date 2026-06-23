@@ -43,6 +43,21 @@ query errors).
 - `POST /api/tokens` `{name}` → `{tokenId,name,token}` (token shown once)
 - `GET /api/tokens` → `[{tokenId,name}]` · `DELETE /api/tokens/:id`
 
+## Users (server admin only)
+All routes require an authenticated **server admin** (`isAdmin`); others get 401/403.
+- `GET /api/users` → `[{username,isAdmin,createdAt}]`
+- `POST /api/users` `{username,password,isAdmin?}` → 201 `{username}` (409 if it exists)
+- `PATCH /api/users/:username` `{isAdmin}` → 204 (409 `CONSTRAINT_VIOLATION` if it would demote the last admin)
+- `POST /api/users/:username/password` `{password}` → 204 (revokes that user's sessions)
+- `DELETE /api/users/:username` → 204 (409 on self-delete or deleting the last admin)
+
+## Audit log (server admin only)
+- `GET /api/audit?limit=<1..1000, default 100>` → `[{seq,at,username,action,target,detail?}]`,
+  most recent first. Records every write op (node/edge create·patch·delete, import,
+  seed, db create·patch·delete, role grant·revoke, write queries, user admin) after
+  it commits. Recording is best-effort — an audit-store failure never fails the
+  underlying write.
+
 ## Live updates
 - `WS /ws/db/:name?token=<t>&labels=A,B&types=X,Y` — server→client frames:
   `{type:'ready'}` (subscription active), `{type:'batch',txId,ops}` (a committed
