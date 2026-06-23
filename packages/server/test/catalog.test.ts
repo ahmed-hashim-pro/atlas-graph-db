@@ -40,11 +40,43 @@ describe('user administration', () => {
   });
 
   it('sets and clears the admin flag', async () => {
+    await cat.createUser('root', 'h', true); // keep an admin so demote is allowed
     await cat.createUser('ada', 'h', false);
     await cat.setUserAdmin('ada', true);
     expect((await cat.findUser('ada'))?.isAdmin).toBe(true);
     await cat.setUserAdmin('ada', false);
     expect((await cat.findUser('ada'))?.isAdmin).toBe(false);
+  });
+
+  it('refuses to demote or delete the last admin', async () => {
+    await cat.createUser('root', 'h', true);
+    await expect(cat.setUserAdmin('root', false)).rejects.toThrow(/last admin/);
+    await expect(cat.deleteUser('root')).rejects.toThrow(/last admin/);
+    expect((await cat.findUser('root'))?.isAdmin).toBe(true);
+  });
+
+  it('atomically keeps an admin under concurrent last-admin demotes', async () => {
+    await cat.createUser('root', 'h', true);
+    await cat.createUser('ada', 'h', true);
+    // Two concurrent demotes of the two distinct admins: the count-and-mutate
+    // runs inside the single-writer queue, so the second sees one admin left and
+    // is rejected — exactly one succeeds, an admin always remains.
+    const results = await Promise.allSettled([
+      cat.setUserAdmin('root', false),
+      cat.setUserAdmin('ada', false),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect((await cat.listUsers()).filter((u) => u.isAdmin)).toHaveLength(1);
+  });
+
+  it('atomically keeps an admin under concurrent last-admin deletes', async () => {
+    await cat.createUser('root', 'h', true);
+    await cat.createUser('ada', 'h', true);
+    const results = await Promise.allSettled([cat.deleteUser('root'), cat.deleteUser('ada')]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect((await cat.listUsers()).filter((u) => u.isAdmin)).toHaveLength(1);
   });
 
   it('resets a password and kills existing sessions', async () => {

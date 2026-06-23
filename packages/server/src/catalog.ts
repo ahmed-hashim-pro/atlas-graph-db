@@ -1,4 +1,4 @@
-import { openDatabase, type AtlasDatabase, type NodeId } from '@atlas/core';
+import { AtlasError, openDatabase, type AtlasDatabase, type NodeId } from '@atlas/core';
 import type { AuditEntry, RoleName, UserSummary } from '@atlas/protocol';
 import { randomBytes } from 'node:crypto';
 
@@ -90,16 +90,37 @@ export class CatalogService {
   }
 
   async deleteUser(username: string): Promise<void> {
-    await this.deleteSessionsForUser(username);
     const user = this.userNode(username);
     if (!user) return;
-    await this.db.transact((tx) => tx.deleteNode(user.id, { detach: true }));
+    // The last-admin check and the delete must be atomic. Both run inside the
+    // single-writer transact callback (reading committed state), so two
+    // concurrent deletes of distinct admins can't both observe a safe count and
+    // leave zero admins. Sessions are revoked only after the node is gone.
+    await this.db.transact((tx) => {
+      if (this.db.getNode(user.id)?.props.isAdmin === true && this.#adminCount() <= 1)
+        throw new AtlasError('CONSTRAINT_VIOLATION', 'cannot delete the last admin');
+      tx.deleteNode(user.id, { detach: true });
+    });
+    await this.deleteSessionsForUser(username);
   }
 
   async setUserAdmin(username: string, isAdmin: boolean): Promise<void> {
     const user = this.userNode(username);
     if (!user) return;
-    await this.db.transact((tx) => tx.setNodeProps(user.id, { isAdmin }));
+    // Atomic last-admin guard (see deleteUser): count admins from committed
+    // state inside the write-queue callback so concurrent demotes can't race.
+    await this.db.transact((tx) => {
+      if (!isAdmin && this.db.getNode(user.id)?.props.isAdmin === true && this.#adminCount() <= 1)
+        throw new AtlasError('CONSTRAINT_VIOLATION', 'cannot demote the last admin');
+      tx.setNodeProps(user.id, { isAdmin });
+    });
+  }
+
+  /** Count users currently holding the admin flag (committed state). */
+  #adminCount(): number {
+    let count = 0;
+    for (const u of this.db.nodesByLabel('User')) if (u.props.isAdmin === true) count++;
+    return count;
   }
 
   /** Replace a user's password hash and revoke all their sessions (a credential change). */
@@ -130,6 +151,26 @@ export class CatalogService {
     await this.db.transact((tx) => {
       tx.createNode(['Audit'], props);
     });
+  }
+
+  /**
+   * Best-effort audit append for request handlers. The audit trail must never
+   * turn an already-committed write into a client-visible failure (which would
+   * mislead a client into retrying a mutation that actually succeeded), so a
+   * recording error is logged and swallowed rather than propagated. Tests that
+   * must observe failures call recordAudit directly.
+   */
+  async tryRecordAudit(entry: {
+    username: string;
+    action: string;
+    target: string;
+    detail?: string;
+  }): Promise<void> {
+    try {
+      await this.recordAudit(entry);
+    } catch (err) {
+      console.error(`audit: failed to record ${entry.action} on ${entry.target}:`, err);
+    }
   }
 
   /** The most recent audit entries (highest seq first), capped at `limit`. */

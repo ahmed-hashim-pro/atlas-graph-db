@@ -1,20 +1,9 @@
-import {
-  CreateUserReq,
-  ResetPasswordReq,
-  UpdateUserReq,
-  usernameSchema,
-  type UserSummary,
-} from '@atlas/protocol';
+import { CreateUserReq, ResetPasswordReq, UpdateUserReq, usernameSchema } from '@atlas/protocol';
 import type { FastifyInstance } from 'fastify';
 import type { AppContext } from '../app.js';
 import { requireAdmin } from '../auth.js';
 import { hashPassword } from '../crypto.js';
 import { HttpError } from '../errors.js';
-
-/** Number of users that currently hold the admin flag. */
-function countAdmins(users: UserSummary[]): number {
-  return users.filter((u) => u.isAdmin).length;
-}
 
 export async function registerUserRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
   const admin = { preHandler: requireAdmin(ctx.catalog) };
@@ -30,7 +19,7 @@ export async function registerUserRoutes(app: FastifyInstance, ctx: AppContext):
       await hashPassword(body.password),
       body.isAdmin ?? false,
     );
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'user:create',
       target: body.username,
@@ -42,13 +31,12 @@ export async function registerUserRoutes(app: FastifyInstance, ctx: AppContext):
   app.patch('/api/users/:username', admin, async (req, reply) => {
     const username = usernameSchema.parse((req.params as { username: string }).username);
     const body = UpdateUserReq.parse(req.body);
-    const user = await ctx.catalog.findUser(username);
-    if (!user) throw new HttpError(404, 'NOT_FOUND', `user "${username}" not found`);
-    // Guard: never demote the last remaining admin (would lock out admin access).
-    if (user.isAdmin && !body.isAdmin && countAdmins(await ctx.catalog.listUsers()) <= 1)
-      throw new HttpError(409, 'CONSTRAINT_VIOLATION', 'cannot demote the last admin');
+    if (!(await ctx.catalog.findUser(username)))
+      throw new HttpError(404, 'NOT_FOUND', `user "${username}" not found`);
+    // The last-admin demote guard is enforced atomically inside the catalog
+    // (CONSTRAINT_VIOLATION → 409) so concurrent demotes cannot race past it.
     await ctx.catalog.setUserAdmin(username, body.isAdmin);
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'user:update',
       target: username,
@@ -62,7 +50,7 @@ export async function registerUserRoutes(app: FastifyInstance, ctx: AppContext):
     if (!(await ctx.catalog.findUser(username)))
       throw new HttpError(404, 'NOT_FOUND', `user "${username}" not found`);
     await ctx.catalog.resetPassword(username, await hashPassword(body.password));
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'user:password-reset',
       target: username,
@@ -72,15 +60,14 @@ export async function registerUserRoutes(app: FastifyInstance, ctx: AppContext):
 
   app.delete('/api/users/:username', admin, async (req, reply) => {
     const username = usernameSchema.parse((req.params as { username: string }).username);
-    const user = await ctx.catalog.findUser(username);
-    if (!user) throw new HttpError(404, 'NOT_FOUND', `user "${username}" not found`);
-    // Guard: never delete yourself or the last remaining admin.
+    if (!(await ctx.catalog.findUser(username)))
+      throw new HttpError(404, 'NOT_FOUND', `user "${username}" not found`);
+    // Self-delete is rejected here; the last-admin guard is enforced atomically
+    // inside catalog.deleteUser (CONSTRAINT_VIOLATION → 409).
     if (username === req.principal!.username)
       throw new HttpError(409, 'CONSTRAINT_VIOLATION', 'cannot delete your own account');
-    if (user.isAdmin && countAdmins(await ctx.catalog.listUsers()) <= 1)
-      throw new HttpError(409, 'CONSTRAINT_VIOLATION', 'cannot delete the last admin');
     await ctx.catalog.deleteUser(username);
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'user:delete',
       target: username,

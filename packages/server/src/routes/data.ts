@@ -29,7 +29,7 @@ function auditWrite(
   detail: string,
 ): Promise<void> {
   const target = (req.params as { name: string }).name;
-  return ctx.catalog.recordAudit({ username: req.principal!.username, action, target, detail });
+  return ctx.catalog.tryRecordAudit({ username: req.principal!.username, action, target, detail });
 }
 
 export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext): Promise<void> {
