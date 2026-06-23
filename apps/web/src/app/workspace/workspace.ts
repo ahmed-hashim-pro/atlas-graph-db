@@ -8,6 +8,7 @@ import { AtlasApi } from '../core/atlas-api';
 import { AlgorithmsView } from './algorithms-view';
 import { Console } from './console';
 import { ConsoleStore } from './console.store';
+import { DbSettings } from './db-settings';
 import { GraphCanvas } from './graph-canvas';
 import { GraphStore } from './graph.store';
 import { GraphStoreWorkspaceAdapter } from './graph-store.adapter';
@@ -21,7 +22,7 @@ import { CommandPalette } from '../search/command-palette';
 import type { NodeHit } from '../search/node-search';
 
 /** Which dock panel is open below the canvas. */
-export type WorkspaceDock = 'console' | 'schema' | 'algorithms' | null;
+export type WorkspaceDock = 'console' | 'schema' | 'algorithms' | 'settings' | null;
 
 /** Initial query: a capped sample of nodes with their edges to seed the canvas. */
 const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
@@ -36,6 +37,7 @@ const INITIAL_QUERY = 'MATCH (n)-[r]-(m) RETURN n, r, m LIMIT $limit';
     Console,
     SchemaView,
     AlgorithmsView,
+    DbSettings,
     CommandPalette,
   ],
   templateUrl: './workspace.html',
