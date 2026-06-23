@@ -134,7 +134,7 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
       imp = { nodes: parsed.nodes, edges: parsed.edges, atomic: parsed.atomic };
     }
     const result = await runImport(db, imp);
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'import',
       target: name,
@@ -170,7 +170,7 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
       throw new HttpError(404, 'NOT_FOUND', `unknown dataset "${dataset}"`);
     const db = await ctx.manager.get(name);
     await loadDataset(db, scienceHistory());
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'seed',
       target: name,

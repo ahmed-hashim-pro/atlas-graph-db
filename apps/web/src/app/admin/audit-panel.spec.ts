@@ -29,8 +29,11 @@ describe('AuditPanel', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.textContent).toContain('db:create');
-    expect(el.textContent).toContain('user:create');
+    const text = el.textContent ?? '';
+    expect(text).toContain('db:create');
+    expect(text).toContain('user:create');
+    // Highest seq first: the db:create (seq 2) row precedes user:create (seq 1).
+    expect(text.indexOf('db:create')).toBeLessThan(text.indexOf('user:create'));
 
     listAudit.mockClear();
     await fixture.componentInstance.refresh();

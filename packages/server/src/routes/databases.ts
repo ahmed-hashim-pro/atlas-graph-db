@@ -17,7 +17,7 @@ export async function registerDatabaseRoutes(app: FastifyInstance, ctx: AppConte
       throw new HttpError(409, 'CONSTRAINT_VIOLATION', `database "${body.name}" already exists`);
     await ctx.catalog.createDatabase(body.name, req.principal!.username);
     await ctx.manager.get(body.name); // materialize the data dir
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'db:create',
       target: body.name,
@@ -42,7 +42,7 @@ export async function registerDatabaseRoutes(app: FastifyInstance, ctx: AppConte
     await requireCapability(ctx.catalog, req.principal!, name, 'admin-db');
     const body = PatchDbReq.parse(req.body);
     if (body.description !== undefined) await ctx.catalog.patchDatabase(name, body.description);
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'db:patch',
       target: name,
@@ -56,7 +56,7 @@ export async function registerDatabaseRoutes(app: FastifyInstance, ctx: AppConte
     await ctx.manager.evict(name);
     await ctx.catalog.deleteDatabase(name);
     await rm(join(ctx.config.dataDir, 'db', name), { recursive: true, force: true });
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'db:delete',
       target: name,
@@ -71,7 +71,7 @@ export async function registerDatabaseRoutes(app: FastifyInstance, ctx: AppConte
     if (!(await ctx.catalog.findUser(body.username)))
       throw new HttpError(404, 'NOT_FOUND', `user "${body.username}" not found`);
     await ctx.catalog.grantRole(body.username, name, body.role);
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'role:grant',
       target: name,
@@ -85,7 +85,7 @@ export async function registerDatabaseRoutes(app: FastifyInstance, ctx: AppConte
     await requireCapability(ctx.catalog, req.principal!, name, 'admin-db');
     const user = (req.params as { user: string }).user;
     await ctx.catalog.revokeRole(user, name);
-    await ctx.catalog.recordAudit({
+    await ctx.catalog.tryRecordAudit({
       username: req.principal!.username,
       action: 'role:revoke',
       target: name,
