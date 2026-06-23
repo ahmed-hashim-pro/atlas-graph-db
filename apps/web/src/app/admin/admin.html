@@ -19,6 +19,24 @@
     >
       Roles
     </button>
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="tab() === 'users'"
+      [class.active]="tab() === 'users'"
+      (click)="tab.set('users')"
+    >
+      Users
+    </button>
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="tab() === 'audit'"
+      [class.active]="tab() === 'audit'"
+      (click)="tab.set('audit')"
+    >
+      Audit
+    </button>
   </nav>
 
   @switch (tab()) {
@@ -27,6 +45,12 @@
     }
     @case ('roles') {
       <app-roles-panel />
+    }
+    @case ('users') {
+      <app-users-panel />
+    }
+    @case ('audit') {
+      <app-audit-panel />
     }
   }
 </section>
