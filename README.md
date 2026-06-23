@@ -4,7 +4,7 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
-**Status:** v1.1.0 — production-ready. A from-scratch embedded graph engine
+**Status:** v1.1.1 — production-ready. A from-scratch embedded graph engine
 (WAL + snapshots + crash recovery, transactions, property/unique/fulltext
 indexes, traversals, graph algorithms, a change feed) under a full AQL query
 language, a multi-user Fastify server (argon2id auth with revocable sessions +
@@ -13,7 +13,8 @@ REST + WebSocket, import/export, Prometheus `/metrics`, rate limiting, CORS,
 security headers, static SPA hosting), a typed isomorphic client SDK, and the
 Knowledge Graph Explorer (Angular 20, standalone + signals + zoneless: graph
 canvas, AQL console, schema + algorithms views, data import, ⌘K node search,
-token/role admin). Benchmark targets per §2 are tracked in `docs/BENCHMARKS.md`.
+token/role admin). The spec §2 capacity-point benchmark gate (1M nodes / 5M edges)
+is signed off in `docs/BENCHMARKS.md`.
 
 ## Quickstart (Docker)
 
