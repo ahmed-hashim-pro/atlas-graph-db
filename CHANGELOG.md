@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.1 — 2026-06-24
+
+Capacity-point release gate signed off. No API changes.
+
+### Engine (`@atlas/core`)
+
+- **Recovery performance**: the spec §2 capacity-point gate (1M nodes / 5M edges)
+  now passes — full recovery dropped from 39 s to **16.2 s** (budget < 30 s).
+  Recovery uses a trusted `GraphStore.bulkLoad` fast path (skips per-op index/
+  schema hooks, validation, and defensive clones that only the WAL-replay / tx
+  path needs), and the observed-schema summary is persisted in the snapshot and
+  rehydrated in O(schema) rather than by rescanning the graph. WAL replay and
+  live-write paths are unchanged. Snapshots gain an optional `schema` field;
+  pre-1.1 snapshots without it fall back to a lazy schema rebuild on first use.
+- All four §2 budgets met at the capacity point (heap 2926 MB, 2-hop p95 0.10 ms,
+  268k writes/s, recovery 16.2 s) — see `docs/BENCHMARKS.md`.
+
 ## 1.1.0 — 2026-06-23
 
 Backlog features on top of v1.0.0; engine on-disk format unchanged (the new
