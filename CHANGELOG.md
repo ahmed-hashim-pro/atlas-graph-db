@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.0 — 2026-06-23
+
+Backlog features on top of v1.0.0; engine on-disk format unchanged (the new
+audit log and user store reuse the catalog, dogfooding the engine).
+
+### Server (`@atlas/server`)
+
+- **Global user management** (server-admin only): `GET/POST /api/users`,
+  `PATCH /api/users/:username` (admin flag), `POST /api/users/:username/password`
+  (reset; revokes that user's sessions), `DELETE /api/users/:username`. Last-admin
+  and self-delete lockouts are enforced atomically inside the write queue (no
+  TOCTOU race under concurrent admin changes).
+- **Audit log of write operations**: `GET /api/audit?limit=` returns recent
+  entries (newest first) covering node/edge writes, import/seed, database and role
+  changes, write queries, and user admin. Recording is best-effort — an
+  audit-store failure never fails the underlying committed write.
+
+### Client (`@atlas/client`)
+
+- SDK methods: `listUsers`, `createUser`, `updateUser`, `resetUserPassword`,
+  `deleteUser`, `listAudit`, `patchDatabase`.
+
+### Explorer (`apps/web`)
+
+- Admin: **Users** panel (list/create/promote-demote/reset-password/delete) and
+  an **Audit log** viewer.
+- Workspace: editable **database-settings** form (description) and an inline
+  **AQL error squiggle** in the console (wavy underline over the offending range,
+  complementing the existing caret banner).
+
 ## 1.0.0 — 2026-06-15
 
 First production release of Atlas: an embedded graph engine, AQL query language,

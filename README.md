@@ -4,7 +4,7 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
-**Status:** v1.0.0 — production-ready. A from-scratch embedded graph engine
+**Status:** v1.1.0 — production-ready. A from-scratch embedded graph engine
 (WAL + snapshots + crash recovery, transactions, property/unique/fulltext
 indexes, traversals, graph algorithms, a change feed) under a full AQL query
 language, a multi-user Fastify server (argon2id auth with revocable sessions +
@@ -49,11 +49,12 @@ major version).
   paths, aggregates, `lower()`/`id()`/`labels()`/`type()` scalars, `CALL algo.*`
   with YIELD, EXPLAIN, parameters, timeouts, and row caps.
 - **Server:** argon2id auth (revocable server-side sessions + bearer tokens), a
-  viewer/editor/owner permission matrix, lazy per-database engines, import/export
-  (JSON + CSV), Prometheus `/metrics`, rate limiting, CORS, security headers.
-- **Explorer:** graph canvas (Web Worker layout, Canvas2D), AQL console, schema +
-  algorithms views, data import, case-insensitive ⌘K node search, token + role
-  admin, three themes.
+  viewer/editor/owner permission matrix, server-admin user management, a write-op
+  audit log, lazy per-database engines, import/export (JSON + CSV), Prometheus
+  `/metrics`, rate limiting, CORS, security headers.
+- **Explorer:** graph canvas (Web Worker layout, Canvas2D), AQL console with inline
+  error squiggles, schema + algorithms views, data import, case-insensitive ⌘K node
+  search, editable database settings, user/audit/token/role admin, three themes.
 
 ## Architecture (in words)
 
