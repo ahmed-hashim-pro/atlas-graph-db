@@ -1,4 +1,5 @@
 import type {
+  AuditEntry,
   DbInfo,
   ImportReq,
   ImportResult,
@@ -7,9 +8,12 @@ import type {
   RoleName,
   SubscribeFilter,
   UserInfo,
+  UserSummary,
   WsFrame,
 } from '@atlas/protocol';
 import type { SchemaSummary } from '@atlas/core';
+
+export type { AuditEntry, UserSummary } from '@atlas/protocol';
 
 export class AtlasClientError extends Error {
   constructor(
@@ -275,6 +279,16 @@ export class AtlasClient {
     return (await res.json()) as DbInfo;
   }
 
+  /** Update a database's settings (currently its description); requires `admin-db`. */
+  async patchDatabase(name: string, patch: { description?: string }): Promise<void> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/db/${name}`, {
+      method: 'PATCH',
+      headers: buildHeaders(this.opts, true, this.jar),
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw await readError(res);
+  }
+
   async seed(name: string, dataset: string): Promise<SeedResult> {
     const res = await request(
       this.opts,
@@ -317,6 +331,74 @@ export class AtlasClient {
       { method: 'DELETE', headers: buildHeaders(this.opts, false, this.jar) },
     );
     if (!res.ok) throw await readError(res);
+  }
+
+  // ---- user administration (server-admin only, enforced server-side) ----
+  async listUsers(): Promise<UserSummary[]> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/users`, {
+      method: 'GET',
+      headers: buildHeaders(this.opts, false, this.jar),
+    });
+    if (!res.ok) throw await readError(res);
+    return (await res.json()) as UserSummary[];
+  }
+
+  async createUser(username: string, password: string, isAdmin = false): Promise<void> {
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/users`, {
+      method: 'POST',
+      headers: buildHeaders(this.opts, true, this.jar),
+      body: JSON.stringify({ username, password, isAdmin }),
+    });
+    if (!res.ok) throw await readError(res);
+  }
+
+  async updateUser(username: string, patch: { isAdmin: boolean }): Promise<void> {
+    const res = await request(
+      this.opts,
+      this.jar,
+      `${this.baseUrl}/api/users/${encodeURIComponent(username)}`,
+      {
+        method: 'PATCH',
+        headers: buildHeaders(this.opts, true, this.jar),
+        body: JSON.stringify(patch),
+      },
+    );
+    if (!res.ok) throw await readError(res);
+  }
+
+  async resetUserPassword(username: string, password: string): Promise<void> {
+    const res = await request(
+      this.opts,
+      this.jar,
+      `${this.baseUrl}/api/users/${encodeURIComponent(username)}/password`,
+      {
+        method: 'POST',
+        headers: buildHeaders(this.opts, true, this.jar),
+        body: JSON.stringify({ password }),
+      },
+    );
+    if (!res.ok) throw await readError(res);
+  }
+
+  async deleteUser(username: string): Promise<void> {
+    const res = await request(
+      this.opts,
+      this.jar,
+      `${this.baseUrl}/api/users/${encodeURIComponent(username)}`,
+      { method: 'DELETE', headers: buildHeaders(this.opts, false, this.jar) },
+    );
+    if (!res.ok) throw await readError(res);
+  }
+
+  // ---- audit log (server-admin only, enforced server-side) ----
+  async listAudit(limit?: number): Promise<AuditEntry[]> {
+    const qs = limit !== undefined ? `?limit=${limit}` : '';
+    const res = await request(this.opts, this.jar, `${this.baseUrl}/api/audit${qs}`, {
+      method: 'GET',
+      headers: buildHeaders(this.opts, false, this.jar),
+    });
+    if (!res.ok) throw await readError(res);
+    return (await res.json()) as AuditEntry[];
   }
 
   // ---- roles (db owner only, enforced server-side) ----

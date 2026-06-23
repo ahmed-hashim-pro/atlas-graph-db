@@ -49,6 +49,41 @@ export type GrantRoleReq = z.infer<typeof GrantRoleReq>;
 export const CreateTokenReq = z.object({ name: z.string().min(1).max(64) });
 export type CreateTokenReq = z.infer<typeof CreateTokenReq>;
 
+// ---- user administration (server-admin only) ----
+export const CreateUserReq = z.object({
+  username: usernameSchema,
+  password: z.string().min(8),
+  isAdmin: z.boolean().optional(),
+});
+export type CreateUserReq = z.infer<typeof CreateUserReq>;
+
+export const UpdateUserReq = z.object({ isAdmin: z.boolean() });
+export type UpdateUserReq = z.infer<typeof UpdateUserReq>;
+
+export const ResetPasswordReq = z.object({ password: z.string().min(8) });
+export type ResetPasswordReq = z.infer<typeof ResetPasswordReq>;
+
+export interface UserSummary {
+  username: string;
+  isAdmin: boolean;
+  createdAt: string;
+}
+
+// ---- audit log (server-admin only) ----
+export interface AuditEntry {
+  seq: number;
+  at: string;
+  username: string;
+  action: string;
+  target: string;
+  detail?: string;
+}
+
+export const ListAuditQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(1000).default(100),
+});
+export type ListAuditQuery = z.infer<typeof ListAuditQuery>;
+
 /** RFC 7807 problem-details, extended with the engine/query error `code`. */
 export interface ProblemDetails {
   type: string;
