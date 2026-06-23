@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../src/database.js';
+import { GraphStore } from '../src/store.js';
 
 let dir: string;
 beforeEach(async () => {
@@ -70,5 +71,42 @@ describe('schema introspection', () => {
     const db2 = await openDatabase(dir);
     expect(JSON.stringify(db2.schema())).toBe(before);
     await db2.close();
+  });
+});
+
+describe('schema bulk-load (recovery fast path)', () => {
+  function seeded(): GraphStore {
+    const s = new GraphStore();
+    s.applyOp({ op: 'createNode', id: 1, labels: ['A'], props: { k: 1 } });
+    s.applyOp({ op: 'createNode', id: 2, labels: ['A'], props: { k: 'two' } });
+    s.applyOp({ op: 'createNode', id: 3, labels: ['B'], props: {} });
+    s.applyOp({ op: 'createEdge', id: 1, type: 'R', from: 1, to: 3, props: {} });
+    return s;
+  }
+
+  it('restores schema from the persisted summary without rescanning the graph', () => {
+    const a = seeded();
+    const summary = a.schema.summary();
+    const b = new GraphStore();
+    b.bulkLoad([...a.nodes.values()], [...a.edges.values()], summary);
+    expect(JSON.stringify(b.schema.summary())).toBe(JSON.stringify(summary));
+  });
+
+  it('rebuilds schema lazily on first read when no summary was persisted', () => {
+    const a = seeded();
+    const want = JSON.stringify(a.schema.summary());
+    const b = new GraphStore();
+    b.bulkLoad([...a.nodes.values()], [...a.edges.values()]); // pre-M8 snapshot: no schema
+    expect(JSON.stringify(b.schema.summary())).toBe(want);
+  });
+
+  it('rebuilds schema lazily on first write, then increments on top', () => {
+    const a = seeded();
+    const b = new GraphStore();
+    b.bulkLoad([...a.nodes.values()], [...a.edges.values()]); // deferred (stale)
+    // A write is the first schema-relevant op: it must rebuild the deferred base
+    // (3 nodes) and then apply its own delta (a 4th A) on top.
+    b.applyOp({ op: 'createNode', id: 4, labels: ['A'], props: { k: 4 } });
+    expect(b.schema.summary().labels.find((l) => l.label === 'A')?.count).toBe(3);
   });
 });

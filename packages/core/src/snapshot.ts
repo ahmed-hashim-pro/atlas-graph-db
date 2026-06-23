@@ -1,5 +1,6 @@
 import { decode, encode } from '@msgpack/msgpack';
 import { AtlasError } from './errors.js';
+import type { SchemaSummary } from './schema.js';
 import type { GraphStore } from './store.js';
 import type { EdgeRecord, IndexDef, NodeRecord } from './types.js';
 
@@ -13,6 +14,12 @@ export interface SnapshotData {
   edges: EdgeRecord[];
   /** Absent in pre-M2 snapshots — treat as []. */
   indexes?: IndexDef[];
+  /**
+   * Persisted observed-schema summary. Absent in pre-M8 snapshots — recovery
+   * then rebuilds the schema lazily from the loaded store on first use. Storing
+   * it keeps the schema read-model out of the recovery hot path (spec §2).
+   */
+  schema?: SchemaSummary;
 }
 
 export function encodeSnapshot(
@@ -27,6 +34,7 @@ export function encodeSnapshot(
     nodes: [...store.nodes.values()],
     edges: [...store.edges.values()],
     indexes: store.indexes.defs(),
+    schema: store.schema.summary(),
   };
   return Buffer.concat([MAGIC, encode(data)]);
 }
