@@ -138,7 +138,6 @@ packages:
 pnpm-lock.yaml
 dist
 docs/
-.superpowers/
 ```
 
 `eslint.config.js`:
@@ -147,7 +146,7 @@ docs/
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', 'docs/**', '.superpowers/**'] },
+  { ignores: ['**/dist/**', 'docs/**'] },
   ...tseslint.configs.recommended,
   {
     rules: {
@@ -352,7 +351,6 @@ node_modules
 **/dist
 .git
 docs
-.superpowers
 data
 ```
 
