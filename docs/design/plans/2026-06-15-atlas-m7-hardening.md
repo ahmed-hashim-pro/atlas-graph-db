@@ -1,14 +1,12 @@
 # Atlas M7 — Production Hardening + v1 Release Sign-off Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Take the feature-complete Atlas platform (M0–M6 merged: engine, AQL, server, client SDK, Explorer) over the v1 finish line via a focused hardening pass — a lean production Docker image running compiled output, structured server error signals (a real detach-required conflict code + failure-path metrics + a documented WS error frame), revocable server-side sessions, a case-insensitive ⌘K search backed by a new `lower()` AQL scalar, static-schema-validated `CALL … YIELD`, a focus-trapped ⌘K dialog with opener restoration, a benchmark sign-off with `docs/BENCHMARKS.md`, and a README/CHANGELOG/version pass that ends with the full gate green. New features that need new server endpoints or large UI surfaces are explicitly deferred to a documented v1.1 backlog.
 
 **Architecture:** No new packages. Changes land in `@atlas/core` (one new AQL-supporting branch is in `@atlas/query`, not core), `@atlas/query` (`lower()` scalar in the parser/evaluator; static-schema YIELD validation in `call.ts`), `@atlas/server` (a dedicated `DETACH_REQUIRED` engine→HTTP mapping replacing a stringly-typed match; query-failure metrics via try/finally; a minimal server-side `Session` store in the catalog so logout/credential-change truly invalidate; a `maxAge` cookie), `@atlas/client` (no API change — it already replays the session cookie), `apps/web` (⌘K uses `lower()` for case-insensitive matching; the command palette traps Tab and restores focus to its opener), the Docker/compose deployment surface, and docs (`api-reference.md`, new `BENCHMARKS.md`, `CHANGELOG.md`, `README.md`). Sessions move from "username in a signed cookie" to "opaque session id in a signed cookie, resolved against a catalog-backed `Session` node"; bearer tokens are unchanged.
 
 **Tech Stack:** Existing stack only — Node ≥22, pnpm 9.15.4, TypeScript 6, Vitest 4, ESLint 10, Prettier 3, Fastify 5 (`@fastify/cookie`/`cors`/`websocket`/`static`), `@node-rs/argon2`, zod 3; Angular 20.3 (standalone, signals, zoneless) with the `@angular/build:unit-test` Vitest runner (jsdom) and Playwright e2e. No new runtime dependencies. Library code uses ESM `.js` import extensions; Angular code uses bare specifiers. Library tests run via `pnpm vitest run <path>`; app tests via `pnpm -F web exec ng test --watch=false`; e2e via `pnpm -F web e2e` (root alias `pnpm e2e:web`), excluded from `pnpm test`. Benchmarks run via `node --expose-gc --import tsx packages/core/bench/*.bench.ts` with `SCALE`/`ASSERT_BUDGETS` env.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` — §2 (v1 capacity point + benchmark-enforced targets: **1M nodes / 5M edges within an 8 GB Node heap; 2-hop p95 < 50 ms; sustained ≥ 5k write ops/s; full recovery < 30 s**); §6.5 (safety rails + observability: rate limiting, timeouts/caps, CORS, security headers, **metrics — query latency histograms, WS subscriber counts**; the audit-log of write ops is acknowledged and explicitly deferred — see v1.1 backlog); §9 (one `AtlasError` hierarchy with stable string codes flowing engine → server problem-details → SDK → UI); §11 (single Docker image serving API + built SPA, volume-mounted data dir, env config, `docker compose up` out of the box, README documents backup/restore + upgrade); §12 **M7 = "benchmark sign-off vs §2 targets, docs, seed polish, release v1."**
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` — §2 (v1 capacity point + benchmark-enforced targets: **1M nodes / 5M edges within an 8 GB Node heap; 2-hop p95 < 50 ms; sustained ≥ 5k write ops/s; full recovery < 30 s**); §6.5 (safety rails + observability: rate limiting, timeouts/caps, CORS, security headers, **metrics — query latency histograms, WS subscriber counts**; the audit-log of write ops is acknowledged and explicitly deferred — see v1.1 backlog); §9 (one `AtlasError` hierarchy with stable string codes flowing engine → server problem-details → SDK → UI); §11 (single Docker image serving API + built SPA, volume-mounted data dir, env config, `docker compose up` out of the box, README documents backup/restore + upgrade); §12 **M7 = "benchmark sign-off vs §2 targets, docs, seed polish, release v1."**
 
 **Existing code anchors (verified against source):**
 - **Engine** (`@atlas/core`): `openDatabase(dir, opts?) → Promise<AtlasDatabase>`; `AtlasDatabase` has `transact(fn)`, `getNode`, `getEdge`, `outEdges`, `inEdges`, `nodesByLabel`, `graph()`, `schema()`, `stats(): { nodeCount; edgeCount }`, `checkpoint()`, `subscribe(fn)`, `close()`. `tx.deleteNode(id, { detach })` throws `new AtlasError('VALIDATION', 'node ${id} has ${n} edge(s); pass { detach: true }')` (`packages/core/src/tx.ts:77-81`). `AtlasError { code, message }` with `AtlasErrorCode = 'VALIDATION'|'NOT_FOUND'|'CONSTRAINT_VIOLATION'|'TIMEOUT'|'WAL_CORRUPT_TAIL'|'WAL_CORRUPT'|'INTERNAL'` (`packages/core/src/errors.ts`).
@@ -84,7 +82,7 @@ Ship a lean runtime image that runs the **compiled** `packages/server/dist/cli.j
 - Modify: `Dockerfile`, `docker-compose.yml`, root `package.json`
 - Create: `.dockerignore`, `scripts/verify-dist.mjs`
 
-- [ ] **Step 1: Write the failing verification script**
+- [x] **Step 1: Write the failing verification script**
 
 `scripts/verify-dist.mjs`:
 
@@ -153,12 +151,12 @@ main().catch((err) => {
 
 Add to root `package.json` `scripts`: `"verify:dist": "node scripts/verify-dist.mjs"`.
 
-- [ ] **Step 2: Run the script to verify it fails (before the build emits dist, or before deps are linked)**
+- [x] **Step 2: Run the script to verify it fails (before the build emits dist, or before deps are linked)**
 
 Run: `pnpm install && pnpm build && pnpm verify:dist`
 Expected at this point: PASS only if the build already emitted `dist/cli.js` (it does — verified present). If you run it BEFORE `pnpm build` it FAILs at `access(CLI)`. This is a verification script, not a unit test; treat a clean PASS after `pnpm build` as the success condition. (Run it once now to confirm the harness works against current `dist`.)
 
-- [ ] **Step 3: Fix the Dockerfile to run compiled output and prune dev deps**
+- [x] **Step 3: Fix the Dockerfile to run compiled output and prune dev deps**
 
 Replace `Dockerfile`:
 
@@ -204,7 +202,7 @@ apps/web/.angular
 *.log
 ```
 
-- [ ] **Step 4: Fix the compose static path**
+- [x] **Step 4: Fix the compose static path**
 
 Edit `docker-compose.yml` — the SPA is built by `@angular/build:application` (project `web`, no `outputPath`) to `apps/web/dist/web/browser/` with `index.html` there. Point `ATLAS_STATIC_DIR` at that directory:
 
@@ -214,12 +212,12 @@ Edit `docker-compose.yml` — the SPA is built by `@angular/build:application` (
 
 (Leave the rest of `docker-compose.yml` unchanged: it already requires `ATLAS_SECRET`/`ATLAS_ADMIN_PASSWORD`, defaults `ATLAS_ADMIN_USER=admin`, and mounts the `atlas-data` volume at `/data`.)
 
-- [ ] **Step 5: Verify the build emits a runnable compiled CLI**
+- [x] **Step 5: Verify the build emits a runnable compiled CLI**
 
 Run: `pnpm build && pnpm verify:dist`
 Expected: `verify-dist: OK …` — `dist/cli.js` exists, a missing-secret start exits non-zero cleanly, and a good-env start serves `/healthz` then drains on SIGTERM. (Docker layer correctness is documented for manual `docker build .` verification in T8's README; the node check is the CI-feasible gate.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -240,7 +238,7 @@ Replace the `err.message.includes('edge')` heuristic in `routes/data.ts` with a 
 - Modify: `packages/server/test/errors.test.ts`, `packages/server/test/data-routes.test.ts`, `packages/server/test/metrics.test.ts`
 - Modify: `docs/api-reference.md`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `packages/core/test/tx.test.ts` (a focused regression alongside the existing detach behavior):
 
@@ -327,12 +325,12 @@ Add to the `/metrics endpoint` describe block in `packages/server/test/metrics.t
 
 > `MATCH (n) RETURN` (empty RETURN list) throws an `AqlError` at parse time inside `capabilityFor`; the route's `catch (parseErr)` block increments both counters before re-throwing, so the 400 is still metered. The assertion (both counters > 0) is the contract.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/tx.test.ts packages/server/test/errors.test.ts packages/server/test/data-routes.test.ts packages/server/test/metrics.test.ts`
 Expected: FAIL — `DETACH_REQUIRED` is not a code yet, `toProblem` has no mapping, the engine still throws `VALIDATION`, and failed queries are not metered.
 
-- [ ] **Step 3: Implement the engine code**
+- [x] **Step 3: Implement the engine code**
 
 `packages/core/src/errors.ts` — add the new code to the union (after `'CONSTRAINT_VIOLATION'`):
 
@@ -359,7 +357,7 @@ export type AtlasErrorCode =
         );
 ```
 
-- [ ] **Step 4: Implement the server mapping + failure metrics**
+- [x] **Step 4: Implement the server mapping + failure metrics**
 
 `packages/server/src/errors.ts` — add `DETACH_REQUIRED: 409` to `ENGINE_STATUS`:
 
@@ -449,7 +447,7 @@ Remove the now-unused `AtlasError` import from `routes/data.ts` (keep `type Atla
 
 > This meters BOTH a parse failure (counted in the `catch (parseErr)` block before re-throwing) and an execution failure (counted in the `finally`). A 403 from `requireCapability` is intentionally not counted as a query (no query ran).
 
-- [ ] **Step 5: Document the 409 code and the WS error frame**
+- [x] **Step 5: Document the 409 code and the WS error frame**
 
 Edit `docs/api-reference.md`. Under **Data CRUD**, append a line:
 
@@ -471,12 +469,12 @@ Replace the **Live updates** section so it documents all four frames including `
   upgrade before `open` (the client never sees a frame).
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/tx.test.ts packages/server/test/errors.test.ts packages/server/test/data-routes.test.ts packages/server/test/metrics.test.ts && pnpm build`
 Expected: PASS — engine throws `DETACH_REQUIRED`, the 409 body carries the code, a failed query increments both counters, build clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -495,7 +493,7 @@ Move sessions from "username in a signed cookie" to "opaque session id in a sign
 - Modify: `packages/server/src/catalog.ts`, `packages/server/src/auth.ts`, `packages/server/src/routes/auth.ts`, `packages/server/src/config.ts`
 - Modify: `packages/server/test/catalog.test.ts`, `packages/server/test/auth-routes.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `packages/server/test/catalog.test.ts` (a `Session` suite mirroring the existing token suite):
 
@@ -558,12 +556,12 @@ it('logout invalidates the session: the old cookie is rejected with 401', async 
 
 > The pre-M7 test that relied on a username-bearing cookie surviving logout (if any) must be updated to this revocable behavior — do NOT weaken this assertion.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/catalog.test.ts packages/server/test/auth-routes.test.ts`
 Expected: FAIL — `createSession`/`findSessionUser`/`deleteSession`/`deleteSessionsForUser` do not exist; logout does not invalidate server-side (the old cookie still resolves to the username).
 
-- [ ] **Step 3: Implement the catalog Session store**
+- [x] **Step 3: Implement the catalog Session store**
 
 In `packages/server/src/catalog.ts`:
 
@@ -633,7 +631,7 @@ Add the private lookup alongside `userNode`/`dbNode`/`tokenNode`:
   }
 ```
 
-- [ ] **Step 4: Resolve the cookie via the session store**
+- [x] **Step 4: Resolve the cookie via the session store**
 
 `packages/server/src/auth.ts` — in `authenticate`, replace the cookie branch (lines 27-34) so the cookie value is a session id resolved to a username:
 
@@ -653,7 +651,7 @@ Add the private lookup alongside `userNode`/`dbNode`/`tokenNode`:
 
 (The bearer-token branch below it is unchanged.)
 
-- [ ] **Step 5: Mint/clear the session in the auth routes + add maxAge**
+- [x] **Step 5: Mint/clear the session in the auth routes + add maxAge**
 
 `packages/server/src/config.ts` — add `sessionTtlMs` to `ServerConfig` and `loadConfig` (default 7 days):
 
@@ -700,12 +698,12 @@ export interface ServerConfig {
 
 (Register and whoami are unchanged.)
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/catalog.test.ts packages/server/test/auth-routes.test.ts packages/server/test/app-base.test.ts packages/server/test/e2e.test.ts packages/server/test/full-e2e.test.ts && pnpm build`
 Expected: PASS — session CRUD persists, login→use→logout→old cookie 401, and the existing app/e2e journeys (which login then use the cookie) still pass with the indirection. Build clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -725,7 +723,7 @@ End the body with a blank line then `Co-Authored-By: Claude Fable 5 <noreply@ant
 - Modify: `packages/query/test/eval.test.ts`, `packages/query/test/parser.test.ts`
 - Modify: `apps/web/src/app/search/node-search.ts`, `apps/web/src/app/search/node-search.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `packages/query/test/eval.test.ts` (mirror its existing `evalExpr`/`parseExpression` harness):
 
@@ -759,12 +757,12 @@ it('an unknown function is still rejected (lower allowed, frobnicate not)', () =
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/eval.test.ts packages/query/test/parser.test.ts`
 Expected: FAIL — `lower` is not in `SCALAR_FUNCS` (validator throws `unknown function`), and `evalExpr`'s `'call'` branch requires the arg to be a bound record so `lower('x')` errors.
 
-- [ ] **Step 3: Implement the scalar**
+- [x] **Step 3: Implement the scalar**
 
 `packages/query/src/ast.ts` — add `lower` to the allowed scalar set:
 
@@ -791,7 +789,7 @@ export const SCALAR_FUNCS = new Set(['id', 'labels', 'type', 'lower']);
       // ...unchanged id()/labels()/type() handling below...
 ```
 
-- [ ] **Step 4: Use `lower()` in the ⌘K search query + update the spec**
+- [x] **Step 4: Use `lower()` in the ⌘K search query + update the spec**
 
 `apps/web/src/app/search/node-search.ts` — rewrite `searchQuery` to be case-insensitive and update the doc comment (the old comment claimed no `toLower` exists — that is now false):
 
@@ -831,12 +829,12 @@ it('builds a case-insensitive, parameterized search query', () => {
 
 (`toHits` is unchanged; keep its existing specs green.)
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/eval.test.ts packages/query/test/parser.test.ts && pnpm -F web exec ng test --watch=false`
 Expected: PASS — `lower()` evaluates/validates; the search query is case-insensitive; the existing palette/search specs still pass (`toHits` and the palette's call to `searchQuery` are shape-compatible).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -855,7 +853,7 @@ Today `runCall` validates requested YIELD columns only against `results[0]` and 
 - Modify: `packages/query/src/call.ts`
 - Modify: `packages/query/test/call.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `packages/query/test/call.test.ts`. The shared `beforeEach` builds a 3-cycle, on which `algo.cycles` returns rows and `algo.topoSort` THROWS `VALIDATION` (verified against `algo-dag.test.ts`). To exercise an **empty result with a valid static schema**, build a fresh acyclic database in-test and use `algo.cycles` (static columns `['cycle']`), which returns `[]` on an acyclic graph:
 
@@ -893,12 +891,12 @@ describe('CALL YIELD validation uses the static algorithm schema', () => {
 
 > `mkdtemp`/`openDatabase`/`rm`/`tmpdir`/`join` are already imported at the top of `call.test.ts` (verified). `algo.cycles` static columns are `['cycle']`; on an acyclic graph it returns `[]`, so this exercises the empty-result path the fix targets.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm vitest run packages/query/test/call.test.ts`
 Expected: FAIL — the typo'd-YIELD-on-empty case is accepted today (no error thrown).
 
-- [ ] **Step 3: Implement static-schema validation**
+- [x] **Step 3: Implement static-schema validation**
 
 `packages/query/src/call.ts` — add a static column map next to `ALGOS` (the exact keys each runner produces) and validate YIELD against it:
 
@@ -938,12 +936,12 @@ Replace the YIELD-validation loop (currently `call.ts:127-135`) with one that ch
 
 > Every key in `ALGOS` has an entry in `ALGO_COLUMNS` (kept in lockstep). The `schema ? … : …` fallback preserves the old behavior for any future runner added without a schema entry — but the lint/test gate below makes the lockstep explicit.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/call.test.ts`
 Expected: PASS — typo'd YIELD on an empty result is now `SEMANTIC_ERROR`; valid YIELD on an empty result returns the columns with no rows; the non-empty typo case still fails; all existing CALL tests stay green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -962,7 +960,7 @@ Make the command-palette dialog accessible per §7.5: capture `document.activeEl
 - Modify: `apps/web/src/app/search/command-palette.ts`, `apps/web/src/app/search/command-palette.html`
 - Modify: `apps/web/src/app/search/command-palette.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `apps/web/src/app/search/command-palette.spec.ts`:
 
@@ -999,12 +997,12 @@ it('traps Tab within the dialog (focusables stay inside)', () => {
 
 > Keep the existing three specs (`runs the search…`, `arrow keys…`, `Escape emits close`). The Escape spec calls `cmp.onKey(Escape)` and expects `closed` to fire — `close()` must still emit `closed`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `captureOpener`/`close` do not exist; Tab is not trapped.
 
-- [ ] **Step 3: Implement the focus trap + restoration**
+- [x] **Step 3: Implement the focus trap + restoration**
 
 `apps/web/src/app/search/command-palette.ts` — add opener capture, a `close()` that restores + emits, and Tab trapping in `onKey`:
 
@@ -1128,12 +1126,12 @@ export class CommandPalette {
 
 > The palette's `closed` output already drives `closePalette()` (sets `paletteOpen=false`); `onPick` also sets it false. No host template change needed beyond keeping `(closed)="closePalette()"`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — focus restores to the opener on close, Tab is trapped, and the three original specs (search/arrows/Escape) still pass (Escape now flows through `close()` which still emits `closed`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1153,7 +1151,7 @@ Run both bench harnesses at a CI-feasible scale (`SCALE=0.05`), capture the numb
 - Create: `docs/BENCHMARKS.md`
 - Modify: `.github/workflows/nightly.yml`
 
-- [ ] **Step 1: Run the benches at a representative scale and capture the JSON**
+- [x] **Step 1: Run the benches at a representative scale and capture the JSON**
 
 Run (after `pnpm build`):
 
@@ -1164,7 +1162,7 @@ SCALE=0.05 node --expose-gc --import tsx packages/core/bench/algo.bench.ts
 
 `storage.bench.ts` prints a `console.table` plus a JSON line: `{ SCALE, nodeCount, edgeCount, loadMs, writeOpsPerSec, p95TwoHopMs, heapMb, recoveryMs }`. `algo.bench.ts` prints a `console.table` of `{ name, ms }` per algorithm. **Record the actual numbers from this run** — paste them verbatim into `docs/BENCHMARKS.md` Step 2 (do not invent values).
 
-- [ ] **Step 2: Write `docs/BENCHMARKS.md`**
+- [x] **Step 2: Write `docs/BENCHMARKS.md`**
 
 `docs/BENCHMARKS.md` (fill the two results tables with the numbers captured in Step 1; the example rows below are placeholders to replace with the real `SCALE=0.05` output — the §2 target column is fixed):
 
@@ -1242,11 +1240,11 @@ to run). Record the capacity-point output here when the gate is run for a releas
 > executed on a large runner, this section documents the exact command to run.)
 ```
 
-- [ ] **Step 2b: Run the capacity-point gate if a large runner is available**
+- [x] **Step 2b: Run the capacity-point gate if a large runner is available**
 
 If (and only if) a machine with sufficient heap is available, run the release-gate command from Step 2 and paste its output into the BENCHMARKS.md sign-off block. **Do NOT claim the SCALE=1 run passed unless it was actually executed** — otherwise leave it documented as the release-gate step (the §2 budgets are still enforced by the assertion when run).
 
-- [ ] **Step 3: Add a CI-feasible bench smoke to the nightly lane**
+- [x] **Step 3: Add a CI-feasible bench smoke to the nightly lane**
 
 Edit `.github/workflows/nightly.yml` — add a fast `SCALE=0.05` smoke step (always runs, completes in seconds) before the heavier scaled runs, so a broken harness is caught nightly even when the large scale is skipped:
 
@@ -1262,12 +1260,12 @@ Edit `.github/workflows/nightly.yml` — add a fast `SCALE=0.05` smoke step (alw
 
 (Remove the now-duplicate standalone `- run: pnpm build` if one already precedes the scaled runs — keep a single build step.)
 
-- [ ] **Step 4: Verify the benches and docs**
+- [x] **Step 4: Verify the benches and docs**
 
 Run: `SCALE=0.05 node --expose-gc --import tsx packages/core/bench/storage.bench.ts`
 Expected: prints a report table + a JSON line with all five metrics; the numbers match what you pasted into `docs/BENCHMARKS.md`. Confirm `docs/BENCHMARKS.md` has no remaining `_<from run>_` placeholders.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1286,7 +1284,7 @@ Bring the README to a v1 quickstart (docker compose up, API + AQL reference link
 - Modify: `README.md`, all `packages/*/package.json`, `apps/web/package.json`
 - Create: `CHANGELOG.md`
 
-- [ ] **Step 1: Rewrite the README status/quickstart**
+- [x] **Step 1: Rewrite the README status/quickstart**
 
 Replace the `**Status:**` block and add a quickstart + feature list + architecture-in-words + reference links in `README.md`:
 
@@ -1362,12 +1360,12 @@ through `@atlas/client`.
 - AQL: [`docs/aql-reference.md`](docs/aql-reference.md)
 - Benchmarks: [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
-- Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`
+- Design spec: `docs/design/specs/2026-06-10-atlas-graph-platform-design.md`
 ```
 
 (Keep the existing `## Develop` and `## Benchmark` sections; ensure the `## Benchmark` section links to `docs/BENCHMARKS.md`.)
 
-- [ ] **Step 2: Write the CHANGELOG**
+- [x] **Step 2: Write the CHANGELOG**
 
 `CHANGELOG.md`:
 
@@ -1423,21 +1421,21 @@ multi-user server, client SDK, and the Knowledge Graph Explorer.
   the release-gate command and the nightly bench lane.
 ```
 
-- [ ] **Step 3: Bump versions to 1.0.0**
+- [x] **Step 3: Bump versions to 1.0.0**
 
 Set `"version": "1.0.0"` in each `packages/*/package.json` (`core`, `query`, `protocol`, `server`, `client`, `datasets`) and `apps/web/package.json`. (The root `package.json` has no `version` field — leave it; it stays `private` without one.) These are private workspace packages, so `workspace:*` dependency specs are unaffected.
 
-- [ ] **Step 4: Run the full gate**
+- [x] **Step 4: Run the full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test && pnpm verify:dist`
 Expected: all green — `tsc -b` builds the libraries, the Angular builder builds the app, `typecheck:test` covers every test/bench tsconfig, eslint + prettier pass, `pnpm test` runs the library Vitest suite plus the app `ng test` suite, and `verify:dist` confirms the compiled CLI boots and serves `/healthz`.
 
-- [ ] **Step 5: Run the e2e separately (excluded from the default gate)**
+- [x] **Step 5: Run the e2e separately (excluded from the default gate)**
 
 Run: `pnpm -F web e2e`
 Expected: PASS — the existing Playwright suites (`explorer`, `workspace`, `console`, `explorer-m6d`). The M6d e2e searches ⌘K with `Ada`; case-insensitive search still matches it, so the suite stays green. If the built static path differs, ensure `playwright.config.ts`'s `ATLAS_STATIC_DIR` points at `apps/web/dist/web/browser` (the same path T1 set in compose) and rerun.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

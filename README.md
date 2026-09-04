@@ -1,5 +1,7 @@
 # Atlas
 
+[![CI](https://github.com/ahmed-hashim-pro/atlas-graph-db/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmed-hashim-pro/atlas-graph-db/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A graph database platform in TypeScript: a from-scratch embedded engine
 (WAL + snapshots, transactions, indexes, traversals, algorithms, AQL query
 language) with a multi-user server and the Knowledge Graph Explorer web app.
@@ -77,7 +79,7 @@ through `@atlas/client`.
 - AQL: [`docs/aql-reference.md`](docs/aql-reference.md)
 - Benchmarks: [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md)
 - Changelog: [`CHANGELOG.md`](CHANGELOG.md)
-- Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`
+- Design spec: `docs/design/specs/2026-06-10-atlas-graph-platform-design.md`
 
 ## Develop
 
@@ -93,3 +95,32 @@ See [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) for capacity targets and sign-off
 ```bash
 SCALE=0.05 node --expose-gc --import tsx packages/core/bench/storage.bench.ts
 ```
+
+## Why this exists
+
+I wanted to know how a database actually works, and reading about write-ahead
+logs is not the same as having to make one recover correctly.
+
+So Atlas is built from the storage layer up rather than assembled from
+libraries: the WAL and snapshot format, crash recovery, the transaction and
+index layer, the AQL parser and query planner, the auth and permission model,
+and the client SDK are all written here. The parts that are genuinely someone
+else's problem — HTTP transport, password hashing, the browser framework — use
+Fastify, argon2id and Angular, because reimplementing those buys nothing and
+gets security wrong.
+
+The constraint that shaped most of it was **crash safety**. A graph store that
+loses a write on power failure is a cache with extra steps, so durability came
+before features: WAL first, then snapshots, then recovery tested by killing the
+process mid-transaction. Indexes, traversals, algorithms and the query language
+were all built on top of something that could already be trusted to come back.
+
+The capacity gate was set in the spec before any of it was written — 1M nodes
+and 5M edges, with sign-off recorded in [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md)
+rather than asserted here. Design notes and the milestone plans that produced
+each layer are in [`docs/design/`](docs/design/), including the decisions that
+turned out to be wrong.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

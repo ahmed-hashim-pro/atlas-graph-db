@@ -1,14 +1,12 @@
 # Atlas M6a — Knowledge Graph Explorer: App Shell, Auth, Database Picker, Theming
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Stand up the Knowledge Graph Explorer's foundation: extend `@atlas/client` to a browser-friendly **session/cookie** mode with full auth + database-management coverage so the Angular app talks to the server exclusively through the SDK (spec §7.1); scaffold the Angular 20 app at `apps/web` into the monorepo gate (zoneless, signals, Vitest builder); ship the three first-class CSS-token themes with a persisted signal-based `ThemeService`; an `AtlasApi` Angular service wrapping the client; an `AuthService` + login/register components + route guard; an authenticated app shell with a top bar (theme switcher + user menu) and a database picker (list/create/seed/navigate); and a Playwright e2e smoke that drives register→login→create db→see it→switch theme. The `/db/:name` workspace is a placeholder this milestone.
 
 **Architecture:** `@atlas/client` stays the single API surface. It gains a cookie mode (`mode: 'cookie'` → `credentials: 'include'` on every `fetch`, no `Authorization` header) alongside the existing bearer mode, plus auth methods (`register`/`login`/`logout`/`whoami`) and database methods (`listDatabases`/`createDatabase`/`seed`/`schema`) on `AtlasClient`, and `Database.schema()`. The Angular app (`apps/web`) is a standalone, zoneless, signal-based SPA: `AtlasApi` (DI service) wraps `connect(baseUrl, { mode: 'cookie' })` reading the base URL from Angular `environment` (default same-origin `''` so it hits the hosting `@atlas/server`); `AuthService` holds the current-user signal and calls `AtlasApi`; a functional route guard gates the shell; `ThemeService` applies a `data-theme` attribute on `<html>` and persists to `localStorage`; feature signal stores hold database-picker state. The app builds via the Angular builder (NOT `tsc -b`) and tests via the `@angular/build:unit-test` Vitest runner; the root gate runs both the library Vitest suite and the app suite.
 
 **Tech Stack:** Existing stack (Node 24, pnpm 9.15.4, TypeScript, Vitest, ESLint, Prettier) + Angular 20.3 (standalone, signals, zoneless, Router), `@angular/build` Vitest unit-test runner with jsdom, Playwright for e2e. The client extension uses global `fetch` (cookie mode adds `credentials: 'include'`). CodeMirror AQL editor, the Canvas2D/d3-force graph renderer, the schema view, the algorithms view, the admin screens, and the `/db/:name` workspace itself are **M6b/M6c/M6d — out of scope here.**
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §7.1 (Angular 20 standalone + signals + zoneless; server communication exclusively through `@atlas/client`), §7.2 (screens — M6a does Login/register and the Database picker; Workspace/Schema/Algorithms/Admin are later), §7.4 (three first-class themes as CSS custom-property token sets — Midnight Observatory default, Clean Laboratory, Neon Terminal — instant switching, persisted), §7.5 (keyboard nav, visible focus, ARIA labelling on the shell + auth forms).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §7.1 (Angular 20 standalone + signals + zoneless; server communication exclusively through `@atlas/client`), §7.2 (screens — M6a does Login/register and the Database picker; Workspace/Schema/Algorithms/Admin are later), §7.4 (three first-class themes as CSS custom-property token sets — Midnight Observatory default, Clean Laboratory, Neon Terminal — instant switching, persisted), §7.5 (keyboard nav, visible focus, ARIA labelling on the shell + auth forms).
 
 **Existing code anchors:**
 - `@atlas/client` (`packages/client/src/index.ts`): `connect(url, { token? }) → AtlasClient`; `AtlasClient.database(name) → Database`; `Database.query(aql, params) → Promise<QueryResponse>`, `Database.subscribe(filter, onFrame) → Promise<Subscription>`; `AtlasClientError { code, status, message, problem? }`. Uses global `fetch`/`WebSocket`. Currently bearer-token only — M6a extends it.
@@ -71,7 +69,7 @@ The Angular app authenticates via httpOnly session cookies, not bearer tokens. E
 - Modify: `packages/client/src/index.ts`
 - Test: `packages/client/test/client-session.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/client/test/client-session.test.ts`:
 
@@ -159,12 +157,12 @@ describe('@atlas/client cookie mode', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm install && pnpm vitest run packages/client/test/client-session.test.ts`
 Expected: FAIL — `connect` does not accept `mode`, and `register`/`login`/`whoami`/`logout`/`listDatabases`/`createDatabase`/`seed` / `Database.schema()` do not exist yet.
 
-- [ ] **Step 3: Implement — replace `packages/client/src/index.ts`**
+- [x] **Step 3: Implement — replace `packages/client/src/index.ts`**
 
 ```ts
 import type {
@@ -387,17 +385,17 @@ export function connect(url: string, opts: ConnectOptions = {}): AtlasClient {
 
 Add the `@atlas/core` reference so the `SchemaSummary` type import resolves. In `packages/client/package.json`, add `"@atlas/core": "workspace:*"` to `dependencies` (it is a type-only import, but the workspace link + tsconfig reference are required). In `packages/client/tsconfig.json`, extend `references` to `[{ "path": "../protocol" }, { "path": "../core" }]`.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm install && pnpm vitest run packages/client/test/client-session.test.ts packages/client/test/client.test.ts && pnpm build`
 Expected: PASS — both the new cookie-mode suite and the existing bearer-mode suite, and a clean build.
 
-- [ ] **Step 5: Run the full library gate**
+- [x] **Step 5: Run the full library gate**
 
 Run: `pnpm typecheck:test && pnpm lint && pnpm format`
 Expected: green (no new packages added to the gate yet; `apps/web` does not exist).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -421,7 +419,7 @@ Use the empirically verified recipe exactly — do not re-derive flags. The app 
 - Modify: root `package.json`, root `.gitignore`
 - Test: `apps/web/src/app/app.spec.ts`
 
-- [ ] **Step 1: Scaffold the app**
+- [x] **Step 1: Scaffold the app**
 
 Run from the repo root:
 
@@ -436,14 +434,14 @@ pnpm dlx @angular/cli@20 new web --standalone --routing --style=css --ssr=false 
 mkdir -p apps && mv web apps/web
 ```
 
-- [ ] **Step 2: Swap Karma for Vitest + jsdom**
+- [x] **Step 2: Swap Karma for Vitest + jsdom**
 
 ```bash
 pnpm -F web remove jasmine-core @types/jasmine karma karma-chrome-launcher karma-coverage karma-jasmine karma-jasmine-html-reporter
 pnpm -F web add -D vitest@^3 jsdom@^29
 ```
 
-- [ ] **Step 3: Pin `apps/web/package.json` to the verified shape**
+- [x] **Step 3: Pin `apps/web/package.json` to the verified shape**
 
 Set `name` to `web` (so `pnpm -F web` targets it), `private: true`, `"scripts": { "ng": "ng", "start": "ng serve", "build": "ng build", "test": "ng test --watch=false" }`. Ensure `dependencies` include `@angular/common`, `@angular/compiler`, `@angular/core`, `@angular/forms`, `@angular/platform-browser`, `@angular/router` all at `^20.3.0`, `rxjs ~7.8.0`, `tslib ^2.3.0`, plus `@atlas/client": "workspace:*"` and `@atlas/protocol": "workspace:*"`. Ensure `devDependencies` include `@angular/build ^20.3.28`, `@angular/cli ^20.3.28`, `@angular/compiler-cli ^20.3.0`, `jsdom ^29`, `typescript ~5.9.2`, `vitest ^3`. Remove any `zone.js` dependency (zoneless). Then:
 
@@ -452,7 +450,7 @@ pnpm -F web add @atlas/client@workspace:* @atlas/protocol@workspace:*
 pnpm install
 ```
 
-- [ ] **Step 4: Configure the Vitest test target in `apps/web/angular.json`**
+- [x] **Step 4: Configure the Vitest test target in `apps/web/angular.json`**
 
 The `projects.web.architect` (or `targets`) block must contain a `test` target:
 
@@ -472,7 +470,7 @@ The `projects.web.architect` (or `targets`) block must contain a `test` target:
 
 Confirm the `build` target is `@angular/build:application` with `browser: "src/main.ts"`, `tsConfig: "tsconfig.app.json"`, and `styles: ["src/styles.css"]`.
 
-- [ ] **Step 5: Write the zoneless test-setup providers file**
+- [x] **Step 5: Write the zoneless test-setup providers file**
 
 `apps/web/src/test-setup.ts`:
 
@@ -497,11 +495,11 @@ export default [provideZonelessChangeDetection()];
 
 `apps/web/tsconfig.json` is SELF-CONTAINED (does NOT extend `../../tsconfig.base.json`); leave the Angular-generated compiler options as-is (it sets `strict`, `moduleResolution: "bundler"`, etc.).
 
-- [ ] **Step 6: Confirm `tsc -b` ignores the app**
+- [x] **Step 6: Confirm `tsc -b` ignores the app**
 
 Open the root `tsconfig.json` and verify its `references` array does NOT contain `apps/web` (it lists only `packages/*`). Do not add it — the app builds via the Angular builder, never `tsc -b`.
 
-- [ ] **Step 7: Write the smoke spec and a minimal root component**
+- [x] **Step 7: Write the smoke spec and a minimal root component**
 
 `apps/web/src/app/app.ts` (replace the generated component):
 
@@ -568,12 +566,12 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [];
 ```
 
-- [ ] **Step 8: Run the smoke spec**
+- [x] **Step 8: Run the smoke spec**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — one test, the Vitest builder runs headless under jsdom and exits.
 
-- [ ] **Step 9: Add angular-eslint and gitignore the cache**
+- [x] **Step 9: Add angular-eslint and gitignore the cache**
 
 ```bash
 pnpm -F web exec ng add angular-eslint --skip-confirmation
@@ -588,7 +586,7 @@ apps/web/dist/
 apps/web/out-tsc/
 ```
 
-- [ ] **Step 10: Wire the root gate**
+- [x] **Step 10: Wire the root gate**
 
 In the root `package.json`, change:
 - `"build": "tsc -b"` → `"build": "tsc -b && pnpm -F web build"`
@@ -597,12 +595,12 @@ In the root `package.json`, change:
 
 Confirm `lint` (`eslint .`) and `format` (`prettier --check .`) reach `apps/web/src`. The root `eslint.config.js` already runs from the repo root; the app's own flat config nests under `apps/web`. Prettier's `.prettierignore` already excludes `dist`/`docs` — add `apps/web/.angular`, `apps/web/dist`, `apps/web/out-tsc` if not already covered by the `dist` glob.
 
-- [ ] **Step 11: Run the full gate**
+- [x] **Step 11: Run the full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: green — `tsc -b` ignores `apps/web`, the app builds via the Angular builder, the library Vitest suite passes, and the app smoke spec passes.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add -A
@@ -622,7 +620,7 @@ Ship the three first-class themes (spec §7.4) as CSS custom-property token sets
 - Modify: `apps/web/src/styles.css`
 - Test: `apps/web/src/app/core/theme.service.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/core/theme.service.spec.ts`:
 
@@ -680,12 +678,12 @@ describe('ThemeService', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./theme.service` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/core/theme.service.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/core/theme.service.ts`**
 
 ```ts
 import { Injectable, signal } from '@angular/core';
@@ -760,7 +758,7 @@ export class ThemeService {
 }
 ```
 
-- [ ] **Step 4: Define the token sets in `apps/web/src/styles.css`**
+- [x] **Step 4: Define the token sets in `apps/web/src/styles.css`**
 
 Replace the file with the three token sets plus base layout. Tokens: `--bg`, `--surface`, `--border`, `--text`, `--text-muted`, `--accent`, `--accent-2`, and a six-entry node-label palette `--node-1`..`--node-6`.
 
@@ -854,12 +852,12 @@ button {
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — default, switch, persist/restore, invalid-fallback, and descriptor list.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -878,7 +876,7 @@ A single DI service is the app's only door to the server. It constructs a cookie
 - Create: `apps/web/src/app/core/atlas-api.ts`, `apps/web/src/environments/environment.ts`, `apps/web/src/environments/environment.development.ts`
 - Test: `apps/web/src/app/core/atlas-api.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/core/atlas-api.spec.ts`:
 
@@ -909,12 +907,12 @@ describe('AtlasApi', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./atlas-api` not found.
 
-- [ ] **Step 3: Implement the environment files and the service**
+- [x] **Step 3: Implement the environment files and the service**
 
 `apps/web/src/environments/environment.ts`:
 
@@ -981,12 +979,12 @@ export class AtlasApi {
 
 If `connect(environment.apiBaseUrl, …)` with an empty string trips the client's trailing-slash strip harmlessly (it does: `''.replace(/\/$/, '') === ''`), no change is needed — same-origin relative URLs like `/api/...` resolve against the page origin.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1006,7 +1004,7 @@ Signals hold the current user; the service calls `AtlasApi`; a functional `CanAc
 - Modify: `apps/web/src/app/app.routes.ts`
 - Test: `apps/web/src/app/core/auth.service.spec.ts`, `apps/web/src/app/core/auth.guard.spec.ts`, `apps/web/src/app/auth/login.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/core/auth.service.spec.ts`:
 
@@ -1147,12 +1145,12 @@ describe('Login component', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `auth.service`, `auth.guard`, and `login` not found.
 
-- [ ] **Step 3: Implement the service, guard, and components**
+- [x] **Step 3: Implement the service, guard, and components**
 
 `apps/web/src/app/core/auth.service.ts`:
 
@@ -1358,7 +1356,7 @@ export class Register {
 </main>
 ```
 
-- [ ] **Step 4: Wire the routes in `apps/web/src/app/app.routes.ts`**
+- [x] **Step 4: Wire the routes in `apps/web/src/app/app.routes.ts`**
 
 ```ts
 import { Routes } from '@angular/router';
@@ -1401,12 +1399,12 @@ export const routes: Routes = [
 ];
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — service signal transitions, guard allow/redirect, and login submit/navigate/error.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1426,7 +1424,7 @@ The authenticated shell renders a top bar (app name, theme switcher, user menu/l
 - Modify: `apps/web/src/app/app.routes.ts`
 - Test: `apps/web/src/app/picker/picker.store.spec.ts`, `apps/web/src/app/picker/picker.spec.ts`, `apps/web/src/app/shell/shell.spec.ts`
 
-- [ ] **Step 0: Create the placeholder workspace component**
+- [x] **Step 0: Create the placeholder workspace component**
 
 `apps/web/src/app/workspace/workspace-placeholder.ts`:
 
@@ -1450,7 +1448,7 @@ export class WorkspacePlaceholder {
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/picker/picker.store.spec.ts`:
 
@@ -1590,12 +1588,12 @@ describe('Shell component', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — picker store/component and shell not found.
 
-- [ ] **Step 3: Implement the store, picker, shell, and theme switcher**
+- [x] **Step 3: Implement the store, picker, shell, and theme switcher**
 
 `apps/web/src/app/picker/picker.store.ts`:
 
@@ -1831,7 +1829,7 @@ export class Shell {
 </div>
 ```
 
-- [ ] **Step 4: Restore the full route table in `apps/web/src/app/app.routes.ts`**
+- [x] **Step 4: Restore the full route table in `apps/web/src/app/app.routes.ts`**
 
 Replace the Task 5 minimal routes with the full table (the one shown in Task 5 Step 4's first listing), now that `shell`, `picker`, and `workspace-placeholder` exist:
 
@@ -1859,7 +1857,7 @@ export const routes: Routes = [
 ];
 ```
 
-- [ ] **Step 5: Add shell + form styling to `apps/web/src/styles.css`**
+- [x] **Step 5: Add shell + form styling to `apps/web/src/styles.css`**
 
 Append layout styles using the theme tokens (top bar, auth card, picker grid, role badges, `.sr-only` for screen-reader-only labels):
 
@@ -2005,12 +2003,12 @@ button:disabled {
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — store load/create/seed/error, picker renders rows + role, shell shows username + logs out.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -2030,14 +2028,14 @@ Add a Playwright e2e that drives the real flow (register→login→create db→s
 - Modify: root `package.json`, `README.md`, `apps/web/package.json`, `.gitignore`
 - Test: `apps/web/e2e/explorer.spec.ts`
 
-- [ ] **Step 1: Add Playwright**
+- [x] **Step 1: Add Playwright**
 
 ```bash
 pnpm -F web add -D @playwright/test
 pnpm -F web exec playwright install chromium
 ```
 
-- [ ] **Step 2: Write the e2e config**
+- [x] **Step 2: Write the e2e config**
 
 The e2e serves the production-built SPA from `@atlas/server` static hosting so cookies are same-origin (the most robust option — no CORS, real `credentials: 'include'`). The `webServer` block builds the app, then starts the server pointed at the built `dist` via `ATLAS_STATIC_DIR`, on a fixed port with a temp data dir.
 
@@ -2077,7 +2075,7 @@ export default defineConfig({
 
 Verify the built browser output path: Angular 20's `@angular/build:application` emits to `dist/<project>/browser`. Confirm with `ls apps/web/dist/web/browser/index.html` after a build; if the path differs, set `ATLAS_STATIC_DIR` and the `outputPath` in `angular.json` to match. Confirm `@atlas/server` reads `ATLAS_STATIC_DIR` into `config.staticDir` (the server's `loadConfig` + `app.ts` static branch already support a static dir; if the env var name differs, align `playwright.config.ts` to the actual name used by `loadConfig`).
 
-- [ ] **Step 3: Write the e2e smoke**
+- [x] **Step 3: Write the e2e smoke**
 
 `apps/web/e2e/explorer.spec.ts`:
 
@@ -2113,7 +2111,7 @@ test('register, login, create a database, see it, and switch theme', async ({ pa
 });
 ```
 
-- [ ] **Step 4: Wire the e2e script (excluded from the default gate)**
+- [x] **Step 4: Wire the e2e script (excluded from the default gate)**
 
 In `apps/web/package.json` `scripts`, add `"e2e": "playwright test"`. In the root `package.json`, add `"e2e:web": "pnpm -F web e2e"`. Do NOT add e2e to the root `test` script — keep the default gate fast. Append to `.gitignore`:
 
@@ -2122,12 +2120,12 @@ apps/web/playwright-report/
 apps/web/test-results/
 ```
 
-- [ ] **Step 5: Run the e2e to verify it passes**
+- [x] **Step 5: Run the e2e to verify it passes**
 
 Run: `pnpm -F web e2e`
 Expected: PASS — the webServer builds the SPA, starts `@atlas/server` serving it, and the single spec drives register→picker→create→theme→logout. If the build output path differs, fix `ATLAS_STATIC_DIR` (Step 2 note) and rerun. Do not weaken the assertions.
 
-- [ ] **Step 6: Update the README**
+- [x] **Step 6: Update the README**
 
 In `README.md`, set the `**Status:**` block to:
 
@@ -2142,12 +2140,12 @@ AQL console, schema view, algorithms view, and admin land in M6b–M6d; the
 `/db/:name` route is a placeholder here.
 ```
 
-- [ ] **Step 7: Run the full gate**
+- [x] **Step 7: Run the full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green — `tsc -b` builds the libraries (ignoring `apps/web`), the Angular builder builds the app, `typecheck:test` covers the new client session test tsconfig, eslint + prettier cover `apps/web/src`, and `pnpm test` runs the library Vitest suite plus the app's `ng test` suite. The e2e is intentionally excluded (run separately via `pnpm e2e:web`).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A

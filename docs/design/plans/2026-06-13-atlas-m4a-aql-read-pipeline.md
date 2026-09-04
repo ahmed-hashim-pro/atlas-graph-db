@@ -1,14 +1,12 @@
 # Atlas M4a — AQL Read Pipeline Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Ship `@atlas/query` — the read half of AQL: position-tracked lexer, recursive-descent parser (MATCH patterns incl. variable-length hops, WHERE, RETURN with aggregations, ORDER BY/SKIP/LIMIT, `$parameters`), a selectivity-based planner with `EXPLAIN` JSON, and a synchronous executor compiled onto core's store and indexes, guarded by per-query timeout and max-rows limits, with caret-annotated errors.
 
 **Architecture:** Pure-function pipeline: `lex → parse (AST) → validate → plan (logical PlanNode tree) → execute (generator pipeline over GraphStore)`. Every stage is independently unit-testable; only `execute` touches a database. Reads are fully synchronous (no lease needed — `applyBatch` is synchronous, so sync iteration is point-in-time by construction); guards check row counts every iteration and the clock every 1024 rows. Writes, DDL, and `CALL algo.*` are **M4b — explicitly out of scope here** (the parser rejects them with PARSE_ERROR for now).
 
 **Tech Stack:** Existing stack. New workspace package `packages/query` (`@atlas/query`) depending only on `@atlas/core`. No external parser libraries — the lexer and recursive-descent parser are hand-built per spec §5.3.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §5.2 (AQL surface), §5.3 (pipeline as pure function), §5.4 (errors with `{code, message, line, column, snippet}` + runtime guards), §3 (layering: query depends on core only).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §5.2 (AQL surface), §5.3 (pipeline as pure function), §5.4 (errors with `{code, message, line, column, snippet}` + runtime guards), §3 (layering: query depends on core only).
 
 **Existing code anchors:** `GraphStore` public surface (`nodes`, `nodesByLabel`, `labelCount`, `outEdges/inEdges`, `indexes.has/lookupExact/lookupRange`) in `packages/core/src/store.ts` and `src/index/registry.ts`; `AtlasDatabase` in `src/database.ts` (the `store` field is private — Task 1 adds a read-only `graphStore` accessor); `NodeRecord`/`EdgeRecord`/`Props` in `src/types.ts`.
 
@@ -51,7 +49,7 @@ Conventions carried from M0–M3: ESM imports use `.js` extensions; commits end 
 - Modify: `tsconfig.json` (root), `package.json` (root), `packages/core/src/database.ts`
 - Test: `packages/query/test/errors.test.ts`
 
-- [ ] **Step 1: Write the package files**
+- [x] **Step 1: Write the package files**
 
 `packages/query/package.json`:
 
@@ -103,7 +101,7 @@ Root `tsconfig.json` references gains `{ "path": "packages/query" }`. Root `pack
 export { AqlError, renderSnippet, type AqlErrorCode } from './errors.js';
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/query/test/errors.test.ts`:
 
@@ -135,12 +133,12 @@ describe('AqlError', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm install && pnpm vitest run packages/query/test/errors.test.ts`
 Expected: FAIL — `../src/errors.js` not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/query/src/errors.ts`:
 
@@ -190,12 +188,12 @@ In `packages/core/src/database.ts`, add next to the `algo` getter (with its impo
 
 (`GraphStore` is already imported in database.ts via the store field's type — if it is a type-only import, that suffices.)
 
-- [ ] **Step 5: Run tests + gate to verify**
+- [x] **Step 5: Run tests + gate to verify**
 
 Run: `pnpm vitest run packages/query/test/errors.test.ts && pnpm build && pnpm typecheck:test`
 Expected: PASS; whole solution builds with the new project reference.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -208,7 +206,7 @@ git commit -m "feat(query): package scaffold, AqlError with caret snippets, core
 - Create: `packages/query/src/lexer.ts`
 - Test: `packages/query/test/lexer.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/lexer.test.ts`:
 
@@ -286,12 +284,12 @@ describe('lex', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/lexer.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/query/src/lexer.ts`:
 
@@ -426,12 +424,12 @@ export function lex(source: string): Token[] {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/lexer.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -444,7 +442,7 @@ git commit -m "feat(query): position-tracked AQL lexer"
 - Create: `packages/query/src/ast.ts`, `packages/query/src/parser.ts` (TokenStream + expression grammar; Task 4 appends the query grammar to this file)
 - Test: `packages/query/test/expr-parser.test.ts`
 
-- [ ] **Step 1: Write the AST module**
+- [x] **Step 1: Write the AST module**
 
 `packages/query/src/ast.ts`:
 
@@ -548,7 +546,7 @@ export function walkExpr(e: Expr, visit: (e: Expr) => void): void {
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/query/test/expr-parser.test.ts`:
 
@@ -617,12 +615,12 @@ describe('parseExpression', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/expr-parser.test.ts`
 Expected: FAIL — `parser.js` not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/query/src/parser.ts`:
 
@@ -843,12 +841,12 @@ function parsePrimary(ts: TokenStream): Expr {
 export { AGGREGATES, SCALAR_FUNCS };
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/expr-parser.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -861,7 +859,7 @@ git commit -m "feat(query): AQL AST and precedence-climbing expression parser"
 - Modify: `packages/query/src/parser.ts` (append the query grammar + validation)
 - Test: `packages/query/test/parser.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/parser.test.ts`:
 
@@ -950,12 +948,12 @@ describe('parseQuery — semantic validation', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/parser.test.ts`
 Expected: FAIL — `parseQuery` is not exported.
 
-- [ ] **Step 3: Append the query grammar to `packages/query/src/parser.ts`**
+- [x] **Step 3: Append the query grammar to `packages/query/src/parser.ts`**
 
 ```ts
 import {
@@ -1161,12 +1159,12 @@ function validateQuery(q: ReadQuery, source: string): void {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/parser.test.ts packages/query/test/expr-parser.test.ts`
 Expected: PASS — including the writes-rejected case (`CREATE` is not a keyword, so the parser fails expecting `MATCH`; M4b adds it).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1181,7 +1179,7 @@ Null semantics (v1, simpler than Cypher 3VL, documented): any comparison/text/IN
 - Create: `packages/query/src/eval.ts`
 - Test: `packages/query/test/eval.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/eval.test.ts`:
 
@@ -1251,12 +1249,12 @@ describe('evalExpr', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/eval.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/query/src/eval.ts`:
 
@@ -1394,12 +1392,12 @@ export function evalExpr(e: Expr, binding: Binding, ctx: EvalContext): RuntimeVa
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/eval.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1414,7 +1412,7 @@ The planner picks each pattern's cheapest starting point — `IndexSeek` (cost 1
 - Create: `packages/query/src/plan.ts`, `packages/query/src/planner.ts`
 - Test: `packages/query/test/planner.test.ts`
 
-- [ ] **Step 1: Write the plan-type module**
+- [x] **Step 1: Write the plan-type module**
 
 `packages/query/src/plan.ts`:
 
@@ -1515,7 +1513,7 @@ export function serializePlan(node: PlanNode): Record<string, unknown> {
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/query/test/planner.test.ts`:
 
@@ -1613,12 +1611,12 @@ describe('planner start selection', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/planner.test.ts`
 Expected: FAIL — `planner.js` not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/query/src/planner.ts`:
 
@@ -1924,12 +1922,12 @@ function spliceChild(tree: PlanNode, replacement: PlanNode, leaf: PlanNode): Pla
 
 Note for the implementer: `Expand`'s `toLabels` are checked by the **executor** for expanded targets (Task 7); the planner only emits `Filter` nodes for inline **props** of non-start nodes and residual checks of the start node — that keeps label checks O(1) inside the expand loop instead of building synthetic exprs per hop. The synthetic-`Filter` path via `withNodeChecks(..., residualLabels, ...)` is used only for the start node's residual labels.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/planner.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1944,7 +1942,7 @@ One module: a lazy `bindings()` generator walks the plan's pattern subtree (scan
 - Create: `packages/query/src/exec.ts`
 - Test: `packages/query/test/exec-basic.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/exec-basic.test.ts`:
 
@@ -2055,12 +2053,12 @@ describe('runRead — basics', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/exec-basic.test.ts`
 Expected: FAIL — `exec.js` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/query/src/exec.ts`:
 
@@ -2427,12 +2425,12 @@ function stableKey(values: RuntimeValue[]): string {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/exec-basic.test.ts`
 Expected: PASS — including the guard test (with `timeoutMs: 0` the guard fires deterministically on the first `bump`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2446,7 +2444,7 @@ The executor landed in Task 7; this task pins the trickier semantics with dedica
 **Files:**
 - Test: `packages/query/test/exec-patterns.test.ts`, `packages/query/test/exec-aggregate.test.ts`
 
-- [ ] **Step 1: Write the pattern tests**
+- [x] **Step 1: Write the pattern tests**
 
 `packages/query/test/exec-patterns.test.ts`:
 
@@ -2550,7 +2548,7 @@ describe('multi-pattern joins', () => {
 > the spec-literal expected value and the re-match invariant the case was
 > pinning. No rotation-non-deduplication semantics are introduced.
 
-- [ ] **Step 2: Write the aggregate tests**
+- [x] **Step 2: Write the aggregate tests**
 
 `packages/query/test/exec-aggregate.test.ts`:
 
@@ -2635,12 +2633,12 @@ describe('aggregation', () => {
 });
 ```
 
-- [ ] **Step 3: Run the suites**
+- [x] **Step 3: Run the suites**
 
 Run: `pnpm vitest run packages/query/test/exec-patterns.test.ts packages/query/test/exec-aggregate.test.ts`
 Expected: PASS. Any failure is a real executor bug — fix `exec.ts` (likely suspects: edge-unique path enumeration order, bound-variable re-match in expands, group key collisions), never the expected values: each is hand-derivable from the fixture graphs.
 
-- [ ] **Step 4: Full gate, then commit**
+- [x] **Step 4: Full gate, then commit**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green.
@@ -2657,7 +2655,7 @@ git commit -m "test(query): pin variable-length, join, and aggregation semantics
 - Modify: `packages/query/package.json` (devDependency `"@atlas/datasets": "workspace:*"`)
 - Test: `packages/query/test/api.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/api.test.ts`:
 
@@ -2747,12 +2745,12 @@ describe('executeQuery over science-history', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm install && pnpm build && pnpm vitest run packages/query/test/api.test.ts`
 Expected: FAIL — `api.js` not found (install first: the new `@atlas/datasets` devDependency must link).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/query/src/api.ts`:
 
@@ -2824,12 +2822,12 @@ Add to `packages/query/package.json`:
   "devDependencies": { "@atlas/datasets": "workspace:*" }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/api.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2841,7 +2839,7 @@ git commit -m "feat(query): executeQuery/explainQuery public API with science-hi
 **Files:**
 - Modify: `packages/query/src/index.ts`, `README.md`
 
-- [ ] **Step 1: Finalize the public surface**
+- [x] **Step 1: Finalize the public surface**
 
 Replace `packages/query/src/index.ts`:
 
@@ -2868,7 +2866,7 @@ export { renderExpr, serializePlan, type PlanNode } from './plan.js';
 export { planQuery } from './planner.js';
 ```
 
-- [ ] **Step 2: Update README status**
+- [x] **Step 2: Update README status**
 
 In `README.md`, update the `**Status:**` block to:
 
@@ -2879,12 +2877,12 @@ variable-length hops, WHERE, RETURN aggregations, ORDER BY/SKIP/LIMIT,
 $parameters, caret-annotated errors. Writes/DDL/CALL land in M4b.
 ```
 
-- [ ] **Step 3: Full gate**
+- [x] **Step 3: Full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green across all four packages.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A

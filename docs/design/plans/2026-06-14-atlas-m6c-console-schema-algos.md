@@ -1,14 +1,12 @@
 # Atlas M6c — Knowledge Graph Explorer: AQL Console, Schema View, Algorithms View
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Build the three knowledge-discovery surfaces of the workspace, integrated alongside the M6b graph canvas: a bottom-dock **AQL console** (CodeMirror 6 editor with AQL syntax highlighting, schema-aware autocomplete, error squiggles, ⌘/Ctrl+Enter to run; tabs Results table / visual EXPLAIN Plan / History; results projectable onto the canvas), a **Schema view** (auto-generated diagram of labels with counts and edge types from `Database.schema()` introspection), and an **Algorithms view** (parameter forms for the v1 algorithm set run via `CALL algo.*`, with results painted onto the canvas — node size = score, color = community, highlighted paths). Parsing/tokenizing/completion/plan-transform/history/schema-layout/algorithm-spec stay PLAIN-TS modules unit-tested in Vitest; Angular + CodeMirror are thin wrappers smoke-tested via `ng test`; one Playwright e2e (open console → run a query → see results table; open schema view) is excluded from the default gate.
 
 **Architecture:** Everything talks to the server only through the existing `AtlasApi` service (M6a), which wraps a cookie-mode `@atlas/client`: `api.database(name)` returns a `Database` with `.query(aql, params) → QueryResponse` and `.schema() → SchemaSummary`. The console runs queries (and `EXPLAIN <query>`) through `Database.query`; `AqlError` surfaces as RFC 7807 problem-details on the thrown `AtlasClientError` (`{ code, line, column, snippet }`), which the console renders as inline squiggles + a message with caret position. The CodeMirror editor is wrapped in an Angular component, but all the testable logic — the AQL tokenizer, the completion-source function, the EXPLAIN plan→view-model transform, the history store, the schema diagram layout, and the algorithm spec/argument builder — lives in framework-free TypeScript files unit-tested under jsdom. M6c **consumes** the M6b workspace graph store through a narrow, named interface (`WorkspaceGraphStore`, see anchors): the console calls `store.setGraph(...)` to project result nodes/edges onto the canvas, and the algorithms view calls `store.paintAlgorithmResult(...)` to size/color/highlight. Because M6b is being authored concurrently and may not exist yet, M6c declares this interface in `apps/web/src/app/workspace/workspace-graph-store.contract.ts` (a pure interface + an in-memory fake for tests) and depends only on it — M6b implements the same interface or M6c adapts in M6d (boundary noted below).
 
 **Tech Stack:** Existing stack (Node 24, pnpm 9.15.4, TypeScript, Vitest, ESLint, Prettier) + Angular 20.3 (standalone, signals, zoneless) from M6a, plus **CodeMirror 6** for the AQL editor: `@codemirror/state@^6`, `@codemirror/view@^6`, `@codemirror/language@^6`, `@codemirror/autocomplete@^6`, `@codemirror/commands@^6`. Library logic tests run via the app's `@angular/build:unit-test` Vitest runner under jsdom (`pnpm -F web exec ng test --watch=false`). Playwright for the e2e (already wired in M6a). The graph canvas renderer (M6b), node/edge CRUD inspector (M6b), and admin/import UI + final theming polish (M6d) are **out of scope here.**
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`:
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md`:
 - §7.2 Workspace bottom-dock AQL console — "editor with highlighting + schema-aware autocomplete + error squiggles; tabs: Results table, visual EXPLAIN Plan, History; results can also be projected onto the canvas" → Tasks 1–6.
 - §7.2 Schema view — "auto-generated diagram of labels and edge types from introspection (§4.6)" → Task 7.
 - §7.2 Algorithms view — "parameter forms for the algorithm set; results painted onto the canvas (node size = score, color = community, highlighted paths)" → Task 8.
@@ -77,7 +75,7 @@ Ship the AQL language layer as a framework-free module: a keyword list, a `Strea
 - Create: `apps/web/src/app/workspace/aql-language.ts`, `apps/web/src/app/workspace/aql-editor.ts`
 - Test: `apps/web/src/app/workspace/aql-language.spec.ts`, `apps/web/src/app/workspace/aql-editor.spec.ts`
 
-- [ ] **Step 1: Add the CodeMirror dependencies**
+- [x] **Step 1: Add the CodeMirror dependencies**
 
 ```bash
 pnpm -F web add @codemirror/state@^6 @codemirror/view@^6 @codemirror/language@^6 @codemirror/autocomplete@^6 @codemirror/commands@^6
@@ -86,7 +84,7 @@ pnpm install
 
 These are the canonical CodeMirror 6 packages and resolve cleanly. `@lezer/highlight` (a transitive dep of `@codemirror/language`) supplies the `tags` used by the highlight style; it does not need a direct entry, but if the bundler complains about an unresolved `@lezer/highlight`, add it explicitly: `pnpm -F web add @lezer/highlight@^1`.
 
-- [ ] **Step 2: Write the failing tokenizer test**
+- [x] **Step 2: Write the failing tokenizer test**
 
 `apps/web/src/app/workspace/aql-language.spec.ts`:
 
@@ -159,12 +157,12 @@ describe('tokenizeAql', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./aql-language` not found.
 
-- [ ] **Step 4: Implement `apps/web/src/app/workspace/aql-language.ts`**
+- [x] **Step 4: Implement `apps/web/src/app/workspace/aql-language.ts`**
 
 ```ts
 import { StreamLanguage, LanguageSupport, HighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -340,12 +338,12 @@ export function aql(): LanguageSupport {
 }
 ```
 
-- [ ] **Step 5: Run the tokenizer test to verify it passes**
+- [x] **Step 5: Run the tokenizer test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — keyword list, case-insensitive keywords, strings/numbers/params/labels/operators, comment, and unterminated-string tolerance.
 
-- [ ] **Step 6: Write the failing editor smoke test**
+- [x] **Step 6: Write the failing editor smoke test**
 
 `apps/web/src/app/workspace/aql-editor.spec.ts`:
 
@@ -383,12 +381,12 @@ describe('AqlEditor component', () => {
 });
 ```
 
-- [ ] **Step 7: Run the editor test to verify it fails**
+- [x] **Step 7: Run the editor test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./aql-editor` not found.
 
-- [ ] **Step 8: Implement `apps/web/src/app/workspace/aql-editor.ts`**
+- [x] **Step 8: Implement `apps/web/src/app/workspace/aql-editor.ts`**
 
 The wrapper takes `value` (signal input), emits `valueChange` on every doc edit and `run(text)` on ⌘/Ctrl+Enter. It exposes `setDoc()` and `triggerRun()` for tests and for the History tab's "re-run" (Task 5). `completionSource` (Task 2) is an optional input wired later.
 
@@ -480,12 +478,12 @@ export class AqlEditor implements AfterViewInit, OnDestroy {
 
 Note: `keymap` binding `Mod-Enter` covers both Ctrl+Enter (Windows/Linux) and Cmd+Enter (macOS) — CodeMirror's `Mod` maps to the platform meta key. `triggerRun()` reads from the live `EditorView` when mounted, falling back to the `value` input under jsdom if the view's doc has not been touched.
 
-- [ ] **Step 9: Run both tests to verify they pass**
+- [x] **Step 9: Run both tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — the editor mounts a `.cm-editor`, reflects `value`, emits `valueChange` via `setDoc`, and emits `run('RETURN 1')` via `triggerRun`. (jsdom renders CodeMirror's DOM; layout-dependent behaviors are not asserted.)
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -505,7 +503,7 @@ A pure completion-source factory that, given the live `SchemaSummary`, offers la
 - Modify: `apps/web/src/app/workspace/aql-editor.ts` (already accepts the input — no change needed)
 - Test: `apps/web/src/app/workspace/aql-completions.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/workspace/aql-completions.spec.ts`:
 
@@ -564,12 +562,12 @@ describe('computeCompletions', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./aql-completions` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/aql-completions.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/aql-completions.ts`**
 
 ```ts
 import type { Completion, CompletionContext, CompletionResult, CompletionSource } from '@codemirror/autocomplete';
@@ -687,12 +685,12 @@ function cmType(type: AqlCompletion['type']): string {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — label/edge/property/procedure/keyword contexts, prefix filtering, and the source-shape assertion.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -711,7 +709,7 @@ The console store runs a query through `AtlasApi`/`Database.query`, holds `colum
 - Create: `apps/web/src/app/workspace/console.store.ts`, `apps/web/src/app/workspace/cell-format.ts`, `apps/web/src/app/workspace/results-table.ts`, `apps/web/src/app/workspace/results-table.html`, `apps/web/src/app/workspace/console.ts`, `apps/web/src/app/workspace/console.html`
 - Test: `apps/web/src/app/workspace/console.store.spec.ts`, `apps/web/src/app/workspace/cell-format.spec.ts`, `apps/web/src/app/workspace/console.spec.ts`
 
-- [ ] **Step 1: Write the failing cell-format test**
+- [x] **Step 1: Write the failing cell-format test**
 
 `apps/web/src/app/workspace/cell-format.spec.ts`:
 
@@ -771,12 +769,12 @@ describe('extractGraphElements', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./cell-format` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/cell-format.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/cell-format.ts`**
 
 ```ts
 /** A query-result node cell (a serialized NodeRecord — verified wire shape uses `props`). */
@@ -854,7 +852,7 @@ export function extractGraphElements(columns: string[], rows: unknown[][]): Extr
 }
 ```
 
-- [ ] **Step 4: Write the failing console-store test**
+- [x] **Step 4: Write the failing console-store test**
 
 `apps/web/src/app/workspace/console.store.spec.ts`:
 
@@ -923,12 +921,12 @@ describe('ConsoleStore', () => {
 });
 ```
 
-- [ ] **Step 5: Run the test to verify it fails**
+- [x] **Step 5: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./console.store` not found.
 
-- [ ] **Step 6: Implement `apps/web/src/app/workspace/console.store.ts`**
+- [x] **Step 6: Implement `apps/web/src/app/workspace/console.store.ts`**
 
 The store also holds the active tab and the schema (loaded once per database, fed to autocomplete in Task 2's source). Canvas projection (Task 6) extends `run()`; the projection call is added there.
 
@@ -1030,7 +1028,7 @@ function toConsoleError(e: unknown): ConsoleError {
 }
 ```
 
-- [ ] **Step 7: Implement the Results table + console host**
+- [x] **Step 7: Implement the Results table + console host**
 
 `apps/web/src/app/workspace/results-table.ts`:
 
@@ -1155,7 +1153,7 @@ export class Console {
 
 The squiggle: the structured `ConsoleError` carries `line`/`column`/`snippet`; the editor wrapper exposes an optional `setError(line, column)` decoration in a follow-up — for v1 the error is shown as a banner with the caret snippet (the spec's "error message with caret position"), and the inline squiggle is added by extending `AqlEditor` with a CodeMirror `Decoration.mark` over the offending column range. Add that decoration only if it can be unit-asserted via the banner; the banner + snippet is the asserted surface here. (Inline squiggle decoration noted as a deliberate v1 boundary in the self-review.)
 
-- [ ] **Step 8: Write the console-host smoke test**
+- [x] **Step 8: Write the console-host smoke test**
 
 `apps/web/src/app/workspace/console.spec.ts`:
 
@@ -1203,12 +1201,12 @@ describe('Console host', () => {
 });
 ```
 
-- [ ] **Step 9: Run all Task 3 tests to verify they pass**
+- [x] **Step 9: Run all Task 3 tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — cell-format detection/formatting/extraction, store run/error-mapping/empty-guard, and the console host smoke (results render, error banner with caret).
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add -A
@@ -1228,7 +1226,7 @@ Run `EXPLAIN <query>` through the store, take the returned single `plan` cell (t
 - Modify: `apps/web/src/app/workspace/console.store.ts` (add `explain()`), `apps/web/src/app/workspace/console.ts`/`console.html` (wire the plan tab)
 - Test: `apps/web/src/app/workspace/explain-plan.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/workspace/explain-plan.spec.ts`:
 
@@ -1297,12 +1295,12 @@ describe('planToTree', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./explain-plan` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/explain-plan.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/explain-plan.ts`**
 
 ```ts
 export interface PlanTreeRow {
@@ -1355,7 +1353,7 @@ export function planToTree(plan: unknown, depth = 0, out: PlanTreeRow[] = []): P
 }
 ```
 
-- [ ] **Step 4: Add `explain()` to the console store and wire the plan tab**
+- [x] **Step 4: Add `explain()` to the console store and wire the plan tab**
 
 In `apps/web/src/app/workspace/console.store.ts`, add a plan signal and an `explain` method that prefixes the query and reads the single `plan` cell:
 
@@ -1427,12 +1425,12 @@ export class ExplainPlanView {
 
 In `console.ts`, import `ExplainPlanView`, add it to `imports`, and add an `explain()` method calling `this.store.explain(this.editor()?.doc() ?? '')`. In `console.html`, add an "EXPLAIN" button next to the tab bar (`<button (click)="explain()">EXPLAIN</button>`) and render `<app-explain-plan-view [rows]="store.plan()" />` in the `@case ('plan')` branch.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — unary chain depth ordering, binary expansion, write/call flat plans, unknown-shape tolerance.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1452,7 +1450,7 @@ A recent-queries store persisted to `localStorage` (per database, capped, most-r
 - Modify: `apps/web/src/app/workspace/console.ts`/`console.html` (record on run; render the history tab)
 - Test: `apps/web/src/app/workspace/history.store.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/workspace/history.store.spec.ts`:
 
@@ -1522,12 +1520,12 @@ describe('HistoryStore', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./history.store` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/history.store.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/history.store.ts`**
 
 ```ts
 import { Injectable, signal } from '@angular/core';
@@ -1592,7 +1590,7 @@ export class HistoryStore {
 }
 ```
 
-- [ ] **Step 4: Wire history into the console**
+- [x] **Step 4: Wire history into the console**
 
 In `console.ts`: inject `HistoryStore`, call `history.use(this.database())` in `ngOnInit`, and in `run(text)` call `this.history.add(text)` before `this.store.run(text)`. Add `rerun(query: string)` that calls `this.editor()?.setDoc(query)` then `this.run(query)`. In `console.html`, render the history tab:
 
@@ -1613,12 +1611,12 @@ In `console.ts`: inject `HistoryStore`, call `history.use(this.database())` in `
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — order, de-dup, trim/blank, cap at 50, per-db persistence, clear.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1638,7 +1636,7 @@ Define the narrow `WorkspaceGraphStore` interface that M6c needs from M6b, plus 
 - Modify: `apps/web/src/app/workspace/console.store.ts` (call `setGraph` on a node-bearing result), `apps/web/src/app/workspace/console.ts`/`console.html` (a "Project to canvas" affordance)
 - Test: `apps/web/src/app/workspace/workspace-graph-store.contract.spec.ts`, `apps/web/src/app/workspace/console.store.spec.ts` (add projection cases)
 
-- [ ] **Step 1: Write the failing contract test**
+- [x] **Step 1: Write the failing contract test**
 
 `apps/web/src/app/workspace/workspace-graph-store.contract.spec.ts`:
 
@@ -1683,12 +1681,12 @@ describe('InMemoryWorkspaceGraphStore (the test fake implementing the contract)'
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./workspace-graph-store.contract` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/workspace-graph-store.contract.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/workspace-graph-store.contract.ts`**
 
 ```ts
 import { InjectionToken } from '@angular/core';
@@ -1764,7 +1762,7 @@ import { WORKSPACE_GRAPH_STORE, InMemoryWorkspaceGraphStore } from './workspace/
 
 When M6b lands, it overrides this token with its canvas-backed store (boundary noted in the self-review).
 
-- [ ] **Step 4: Wire projection into the console store**
+- [x] **Step 4: Wire projection into the console store**
 
 In `console.store.ts`, inject the token (optional so the store works in unit tests without a provider) and project node-bearing results:
 
@@ -1795,7 +1793,7 @@ Add:
   }
 ```
 
-- [ ] **Step 5: Add projection cases to `console.store.spec.ts`**
+- [x] **Step 5: Add projection cases to `console.store.spec.ts`**
 
 Append:
 
@@ -1839,12 +1837,12 @@ In `console.html`, add a "Project to canvas" button shown only when projectable:
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — `resultToGraph` projection, the in-memory store contract, console-store projectability + projection, and the existing Task 3 cases still green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -1864,7 +1862,7 @@ Fetch `Database.schema()` and render an auto-generated diagram: one box per labe
 - Modify: `apps/web/src/app/app.routes.ts`
 - Test: `apps/web/src/app/workspace/schema-diagram.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/workspace/schema-diagram.spec.ts`:
 
@@ -1927,12 +1925,12 @@ describe('buildSchemaDiagram', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./schema-diagram` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/schema-diagram.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/schema-diagram.ts`**
 
 ```ts
 import type { SchemaSummary } from '@atlas/client';
@@ -2031,7 +2029,7 @@ export function buildSchemaDiagram(schema: SchemaSummary, viewport: Viewport): S
 }
 ```
 
-- [ ] **Step 4: Implement the Schema view component**
+- [x] **Step 4: Implement the Schema view component**
 
 `apps/web/src/app/workspace/schema-view.ts`:
 
@@ -2099,7 +2097,7 @@ export class SchemaView {
 </section>
 ```
 
-- [ ] **Step 5: Add the schema route**
+- [x] **Step 5: Add the schema route**
 
 In `apps/web/src/app/app.routes.ts`, add a child/sibling route for the schema view under the authenticated guard:
 
@@ -2113,12 +2111,12 @@ In `apps/web/src/app/app.routes.ts`, add a child/sibling route for the schema vi
 
 (Place it alongside the existing `db/:name` route from M6a; keep the `**` redirect last.)
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — node positions in-bounds with counts, dominant-endpoint resolution, self-loop flagging, empty schema, orphan-edge drop.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -2138,7 +2136,7 @@ A pure catalog of the v1 algorithm set (§4.7/§5.2) with their parameter specs,
 - Modify: `apps/web/src/app/app.routes.ts`, `README.md`
 - Test: `apps/web/src/app/workspace/algorithms.spec.ts`, `apps/web/e2e/console.spec.ts`
 
-- [ ] **Step 1: Write the failing algorithms test**
+- [x] **Step 1: Write the failing algorithms test**
 
 `apps/web/src/app/workspace/algorithms.spec.ts`:
 
@@ -2206,12 +2204,12 @@ describe('paintFromRows', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./algorithms` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/algorithms.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/algorithms.ts`**
 
 ```ts
 import type { AlgorithmPaint } from './workspace-graph-store.contract';
@@ -2414,7 +2412,7 @@ export function paintFromRows(spec: AlgorithmSpec, columns: string[], rows: unkn
 }
 ```
 
-- [ ] **Step 4: Implement the Algorithms view**
+- [x] **Step 4: Implement the Algorithms view**
 
 `apps/web/src/app/workspace/algorithms-view.ts`:
 
@@ -2539,7 +2537,7 @@ In `apps/web/src/app/app.routes.ts`, add:
 },
 ```
 
-- [ ] **Step 5: Write the Playwright e2e (excluded from the default gate)**
+- [x] **Step 5: Write the Playwright e2e (excluded from the default gate)**
 
 `apps/web/e2e/console.spec.ts` (uses the same same-origin webServer from M6a's `playwright.config.ts`):
 
@@ -2583,12 +2581,12 @@ test('open the workspace console, run a query, see results; open the schema view
 
 The e2e script `e2e` and the root `e2e:web` already exist (M6a). The workspace route `/db/:name` is a placeholder in M6a; M6b adds the canvas. If M6b has not yet mounted `<app-console>` into the `/db/:name` route when this e2e runs, mark this spec `test.fixme` with a comment pointing at the M6b dependency and keep the schema-view half (which is fully owned by M6c) active; flip it on once M6b mounts the console. (Boundary noted in the self-review.)
 
-- [ ] **Step 6: Run the e2e to verify it passes (or is correctly fixme'd)**
+- [x] **Step 6: Run the e2e to verify it passes (or is correctly fixme'd)**
 
 Run: `pnpm -F web e2e`
 Expected: PASS — register→picker→create→seed→console query→results header→schema view label box. If the console is not yet mounted by M6b, the schema-view assertions still pass and the console half is `fixme`'d with the dependency noted (do not weaken assertions).
 
-- [ ] **Step 7: Update the README**
+- [x] **Step 7: Update the README**
 
 In `README.md`, set the `**Status:**` block to:
 
@@ -2609,12 +2607,12 @@ Angular + CodeMirror are thin wrappers. The canvas itself is M6b; admin + import
 UI + final polish are M6d.
 ```
 
-- [ ] **Step 8: Run the full gate**
+- [x] **Step 8: Run the full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green — `tsc -b` builds the libraries (ignoring `apps/web`), the Angular builder builds the app (CodeMirror resolves), `typecheck:test` is unchanged, eslint + prettier cover the new `apps/web/src/app/workspace` files, and `pnpm test` runs the library Vitest suite plus the app's `ng test` (all M6c specs). The Playwright e2e is intentionally excluded (run separately via `pnpm e2e:web`).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A
