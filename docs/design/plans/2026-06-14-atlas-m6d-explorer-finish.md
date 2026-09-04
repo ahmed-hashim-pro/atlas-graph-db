@@ -1,14 +1,12 @@
 # Atlas M6d — Knowledge Graph Explorer: Import UI, ⌘K Node Search, Admin, and Deferred Polish
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Make the Knowledge Graph Explorer feature-complete. Fold in the four approved M6a/M6b deferred-polish items (route login/register through `AuthService` so the user signal sets immediately; an app-start session-rehydration hook that calls `whoami` before first render; the theme-switcher label/aria redundancy; the live-update handler already consumes the real `WsFrame` and is verified, not changed). Extend `@atlas/client` with the admin/import surface it still lacks (`createToken`/`listTokens`/`revokeToken`, `grantRole`/`revokeRole`, `import`/`importCsv`), unit-tested against a real ephemeral `buildServer` listener. Ship an **Import** page (paste/upload JSON `{nodes,edges}` and CSV `nodesCsv`/`edgesCsv`, atomic toggle, committed/idMap/first-error result), a **⌘K command palette** that searches nodes in the current database via AQL and brings the chosen node onto the canvas + selects + centers it through the real `GraphStore`, and **Admin** views for the current user's API tokens (create-once/list/revoke) and per-database role grants (grant/revoke viewer/editor/owner by username, owners surfaced from `GET /api/db/:name`). Wire the new routes into the shell/workspace nav (guarded), add one Playwright e2e covering ⌘K search and the import flow (excluded from the default gate), flip the README to "M6 complete / Explorer feature-complete", and land the full gate green. Global user management, audit-log UI, and inline AQL error squiggles are explicitly deferred to **M7** (no server endpoints exist for the first two).
 
 **Architecture:** `@atlas/client` stays the single API surface (spec §7.1). It gains, in **cookie mode** (and bearer for parity): `createToken(name)` → `POST /api/tokens` (201 → `{ tokenId, name, token }`, full token shown once), `listTokens()` → `GET /api/tokens` (→ `{ tokenId, name }[]`), `revokeToken(tokenId)` → `DELETE /api/tokens/:id` (204), `grantRole(db, username, role)` → `POST /api/db/:name/roles` (204), `revokeRole(db, username)` → `DELETE /api/db/:name/roles/:user` (204), `import(db, body)` → `POST /api/db/:name/import` (JSON `ImportReq`), and `importCsv(db, body)` → `POST /api/db/:name/import?format=csv` (`{ nodesCsv?, edgesCsv?, atomic? }`); both return `ImportResult`. `getDatabase(name)` already exists (→ `DbInfo { name, role, owners }`). The Angular app: `AtlasApi` re-exposes the new methods; `AuthService` already holds the user signal and gains nothing new (login/register components are rewired to call it); a new `provideAppInitializer` calls `AuthService.refresh()` at bootstrap so a hard refresh rehydrates the user before first render. New feature areas: `import/` (a pure `import-request` builder + an `Import` page reachable from the picker and the workspace), `search/` (a pure `node-search` query/result mapper + a `CommandPalette` overlay mounted in the workspace, ⌘/Ctrl+K toggled, focus-trapped, that selects+centers via the workspace's `GraphStore` + `GraphCanvas.fit()`), and `admin/` (a guarded `Admin` shell-child with a `TokensPanel` and a `RolesPanel` backed by signal stores). All app tests run via the `@angular/build:unit-test` Vitest runner; library tests via `pnpm vitest run`; Playwright via `pnpm -F web e2e` (separate from the default gate).
 
 **Tech Stack:** Existing stack (Node ≥22, pnpm 9.15.4, TypeScript, Vitest 4, ESLint, Prettier) + Angular 20.3 (standalone, signals, zoneless, Router), the `@angular/build:unit-test` Vitest runner (jsdom), Playwright for e2e. No new runtime dependencies: the command palette and admin views use native HTML controls + signals (no Angular CDK). The client extension uses global `fetch` (cookie mode replays the per-connection cookie jar already in `@atlas/client`). Import/search/admin are pure-logic-first: request builders, CSV/JSON validation, and AQL search-query construction are unit-tested in isolation; components get smoke specs.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` — §7.2 (screens: **Admin** = users, tokens, roles, audit log, database settings — M6d ships *tokens* + *roles* + *db owners*, defers users/audit; **Database picker** + **Workspace** import files; **Workspace** top bar includes **⌘K node search**), §6.4 (Import format: JSON `{ nodes:[{tempId,labels,properties}], edges:[{from,to,type,properties}] }`, CSV `nodes.csv`/`edges.csv` with typed headers, `atomic=true` all-or-nothing, response returns committed + `tempId→id` map + first error with row numbers), §6.2 permission matrix (only owners grant/revoke roles; editor/owner import; viewer read-only), §7.5 (keyboard nav for all non-canvas UI, visible focus, ARIA labeling — the ⌘K overlay is focus-trapped with `role="dialog"`/`aria-modal` and an ARIA-labelled listbox).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` — §7.2 (screens: **Admin** = users, tokens, roles, audit log, database settings — M6d ships *tokens* + *roles* + *db owners*, defers users/audit; **Database picker** + **Workspace** import files; **Workspace** top bar includes **⌘K node search**), §6.4 (Import format: JSON `{ nodes:[{tempId,labels,properties}], edges:[{from,to,type,properties}] }`, CSV `nodes.csv`/`edges.csv` with typed headers, `atomic=true` all-or-nothing, response returns committed + `tempId→id` map + first error with row numbers), §6.2 permission matrix (only owners grant/revoke roles; editor/owner import; viewer read-only), §7.5 (keyboard nav for all non-canvas UI, visible focus, ARIA labeling — the ⌘K overlay is focus-trapped with `role="dialog"`/`aria-modal` and an ARIA-labelled listbox).
 
 **Existing code anchors (verified):**
 - `@atlas/client` (`packages/client/src/index.ts`): `connect(url, { token?, mode? }) → AtlasClient`; cookie mode replays a per-connection `CookieJar` and sets `credentials: 'include'`. `AtlasClient` has `register`/`login`/`logout`/`whoami`/`listDatabases`/`createDatabase`/`getDatabase`/`seed`/`database`. `Database` has `query`/`schema`/`subscribe`. `AtlasClientError { code, status, message, problem? }`; `readError(res)` maps a non-OK `Response` to it; `whoami` maps 401→null. Types: `DbSummary { name, description, role }`, `SeedResult`, `Subscription`. **No token/role/import methods yet — M6d adds them.**
@@ -87,7 +85,7 @@ The Admin and Import UIs need a client surface that does not exist yet. Add the 
 - Modify: `packages/client/src/index.ts`
 - Test: `packages/client/test/client-admin-io.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/client/test/client-admin-io.test.ts`:
 
@@ -226,12 +224,12 @@ describe('@atlas/client import', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm install && pnpm vitest run packages/client/test/client-admin-io.test.ts`
 Expected: FAIL — `createToken`/`listTokens`/`revokeToken`/`grantRole`/`revokeRole`/`import`/`importCsv` do not exist on `AtlasClient`.
 
-- [ ] **Step 3: Add the methods + types to `packages/client/src/index.ts`**
+- [x] **Step 3: Add the methods + types to `packages/client/src/index.ts`**
 
 Add these type imports to the existing protocol type import block at the top:
 
@@ -356,17 +354,17 @@ Add these methods to the `AtlasClient` class (after the existing `seed(...)` met
 
 `RoleName`, `ImportReq`, and `ImportResult` are already exported by `@atlas/protocol` (verified in `wire.ts`); no protocol changes are needed.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm vitest run packages/client/test/client-admin-io.test.ts packages/client/test/client-session.test.ts packages/client/test/client.test.ts && pnpm build`
 Expected: PASS — the new admin/io suite, the existing cookie-mode suite, and the existing bearer suite, plus a clean build.
 
-- [ ] **Step 5: Run the full library gate**
+- [x] **Step 5: Run the full library gate**
 
 Run: `pnpm typecheck:test && pnpm lint && pnpm format`
 Expected: green.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -386,7 +384,7 @@ Fold in the four recorded follow-ups. Route login/register through `AuthService`
 - Modify: `apps/web/src/app/auth/login.spec.ts`
 - Create: `apps/web/src/app/auth/register.spec.ts`, `apps/web/src/app/app.config.spec.ts`
 
-- [ ] **Step 1: Write/adjust the failing tests**
+- [x] **Step 1: Write/adjust the failing tests**
 
 Replace `apps/web/src/app/auth/login.spec.ts` so it injects a real `AuthService` (backed by a stub `AtlasApi`) and asserts the user signal is set after submit:
 
@@ -544,12 +542,12 @@ describe('session rehydration initializer', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `Login`/`Register` still call `AtlasApi` directly so `auth.user()` is null; `provideSessionRehydration` is not exported.
 
-- [ ] **Step 3: Implement the polish**
+- [x] **Step 3: Implement the polish**
 
 `apps/web/src/app/auth/login.ts` — inject `AuthService`, not `AtlasApi`:
 
@@ -687,12 +685,12 @@ export const appConfig: ApplicationConfig = {
 </select>
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — login/register set `auth.user()`, the initializer calls `refresh()`, all prior specs still green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -710,7 +708,7 @@ End the body with a blank line then `Co-Authored-By: Claude Fable 5 <noreply@ant
 **Files:**
 - Modify: `apps/web/src/app/core/atlas-api.ts`, `apps/web/src/app/core/atlas-api.spec.ts`
 
-- [ ] **Step 1: Extend the failing spec**
+- [x] **Step 1: Extend the failing spec**
 
 Add to `apps/web/src/app/core/atlas-api.spec.ts` (keep the existing two tests):
 
@@ -728,12 +726,12 @@ Add to `apps/web/src/app/core/atlas-api.spec.ts` (keep the existing two tests):
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — the new methods do not exist on `AtlasApi`.
 
-- [ ] **Step 3: Implement — extend `apps/web/src/app/core/atlas-api.ts`**
+- [x] **Step 3: Implement — extend `apps/web/src/app/core/atlas-api.ts`**
 
 Widen the `@atlas/client` import and add the delegates (keep the existing methods):
 
@@ -784,12 +782,12 @@ Add inside the class (after `seed(...)`):
 
 (`private readonly client: AtlasClient = connect(...)` and the existing delegates are unchanged.)
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -808,7 +806,7 @@ A page (reachable from the picker and the workspace) to import data into a datab
 - Create: `apps/web/src/app/import/import-request.ts`, `apps/web/src/app/import/import.store.ts`, `apps/web/src/app/import/import.ts`, `apps/web/src/app/import/import.html`
 - Test: `apps/web/src/app/import/import-request.spec.ts`, `apps/web/src/app/import/import.store.spec.ts`, `apps/web/src/app/import/import.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/import/import-request.spec.ts`:
 
@@ -966,12 +964,12 @@ describe('Import page', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./import-request`, `./import.store`, `./import` not found.
 
-- [ ] **Step 3: Implement the builder, store, and page**
+- [x] **Step 3: Implement the builder, store, and page**
 
 `apps/web/src/app/import/import-request.ts`:
 
@@ -1251,12 +1249,12 @@ export class Import {
 </section>
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — builder validation matrix, store run/error mapping, and the page smoke.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1276,7 +1274,7 @@ A keyboard-triggered (⌘/Ctrl+K) overlay that searches nodes in the current dat
 - Modify: `apps/web/src/app/workspace/workspace.ts`, `apps/web/src/app/workspace/workspace.html`
 - Test: `apps/web/src/app/search/node-search.spec.ts`, `apps/web/src/app/search/command-palette.spec.ts`, `apps/web/src/app/workspace/workspace.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/search/node-search.spec.ts`:
 
@@ -1429,12 +1427,12 @@ Add to `apps/web/src/app/workspace/workspace.spec.ts` (inside the existing `desc
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./node-search`, `./command-palette` not found; `paletteOpen`/`onHostKey`/`onPick` not on `Workspace`.
 
-- [ ] **Step 3: Implement the pure search module**
+- [x] **Step 3: Implement the pure search module**
 
 `apps/web/src/app/search/node-search.ts`:
 
@@ -1642,7 +1640,7 @@ export class CommandPalette {
 </div>
 ```
 
-- [ ] **Step 4: Wire the palette into the workspace**
+- [x] **Step 4: Wire the palette into the workspace**
 
 Add to `apps/web/src/app/workspace/workspace.ts`: import the palette + the `NodeHit` type and `parseGraphRows`/`neighborQuery` already imported; add a `paletteOpen` signal, a host key handler bound in the template, and an `onPick` that fetches the node, adds it to the store, selects it, and re-fits the canvas.
 
@@ -1725,12 +1723,12 @@ Add at the end of the template (after the closing `</div>` of `.ws-dock` block, 
   }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — the pure search module, the palette overlay (search/arrow/Enter/Escape), and the workspace ⌘K toggle + pick→select.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1749,7 +1747,7 @@ A guarded Admin view (a child of the shell) with two panels. **Tokens:** create 
 - Create: `apps/web/src/app/admin/admin.ts`, `apps/web/src/app/admin/admin.html`, `apps/web/src/app/admin/tokens.store.ts`, `apps/web/src/app/admin/tokens-panel.ts`, `apps/web/src/app/admin/tokens-panel.html`, `apps/web/src/app/admin/roles.store.ts`, `apps/web/src/app/admin/roles-panel.ts`, `apps/web/src/app/admin/roles-panel.html`
 - Test: `apps/web/src/app/admin/tokens.store.spec.ts`, `apps/web/src/app/admin/tokens-panel.spec.ts`, `apps/web/src/app/admin/roles.store.spec.ts`, `apps/web/src/app/admin/roles-panel.spec.ts`, `apps/web/src/app/admin/admin.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/admin/tokens.store.spec.ts`:
 
@@ -1986,12 +1984,12 @@ describe('Admin page', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — none of the admin stores/components exist yet.
 
-- [ ] **Step 3: Implement the stores and components**
+- [x] **Step 3: Implement the stores and components**
 
 `apps/web/src/app/admin/tokens.store.ts`:
 
@@ -2343,12 +2341,12 @@ export class Admin {
 </section>
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — tokens store/panel, roles store/panel, and the Admin tabs.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2367,7 +2365,7 @@ Add the Import and Admin routes (guarded) and surface them in the shell nav and 
 - Modify: `apps/web/src/app/app.routes.ts`, `apps/web/src/app/shell/shell.html`, `apps/web/src/app/picker/picker.html`, `apps/web/src/styles.css`, `README.md`
 - Create: `apps/web/e2e/explorer-m6d.spec.ts`
 
-- [ ] **Step 1: Add the guarded routes**
+- [x] **Step 1: Add the guarded routes**
 
 Add to `apps/web/src/app/app.routes.ts`, inside the `databases` route's `children` array (so they render under the shell with the top bar) — replace the single-child array:
 
@@ -2381,7 +2379,7 @@ Add to `apps/web/src/app/app.routes.ts`, inside the `databases` route's `childre
 
 (The import page reads `?db=` from the query string, so it is reachable as `/databases/import?db=kb`.)
 
-- [ ] **Step 2: Surface the nav links**
+- [x] **Step 2: Surface the nav links**
 
 `apps/web/src/app/shell/shell.html` — add a nav between the brand and the right-side controls:
 
@@ -2426,7 +2424,7 @@ Add `RouterLink` and `RouterLinkActive` to the `Shell` component's imports (`app
 
 Add `RouterLink` to the `Picker` component imports (`apps/web/src/app/picker/picker.ts`): `import { RouterLink, Router } from '@angular/router';` and add `RouterLink` to the `imports` array.
 
-- [ ] **Step 3: Add the overlay / admin / import styling**
+- [x] **Step 3: Add the overlay / admin / import styling**
 
 Append to `apps/web/src/styles.css` (uses the existing theme tokens; the `.sr-only` and form rules already exist from M6a):
 
@@ -2567,7 +2565,7 @@ Append to `apps/web/src/styles.css` (uses the existing theme tokens; the `.sr-on
 }
 ```
 
-- [ ] **Step 4: Write the Playwright e2e (excluded from the default gate)**
+- [x] **Step 4: Write the Playwright e2e (excluded from the default gate)**
 
 `apps/web/e2e/explorer-m6d.spec.ts` (the `apps/web/playwright.config.ts` + the `e2e`/`e2e:web` scripts already exist from M6a; this spec is auto-picked up by `testDir: './e2e'`):
 
@@ -2621,12 +2619,12 @@ test('import data, then find a node with ⌘K and center it on the canvas', asyn
 
 > If `Meta+k` is flaky on the CI Chromium, fall back to `Control+k`; both are handled by `onHostKey`. Do not weaken the import-count or palette assertions.
 
-- [ ] **Step 5: Run the e2e to verify it passes**
+- [x] **Step 5: Run the e2e to verify it passes**
 
 Run: `pnpm -F web e2e`
 Expected: PASS — register→create→import (committed 2)→workspace→⌘K→find "Ada Lovelace"→select. If the built static path differs, fix `ATLAS_STATIC_DIR` in `playwright.config.ts` (the M6a note) and rerun.
 
-- [ ] **Step 6: Update the README**
+- [x] **Step 6: Update the README**
 
 In `README.md`, set the `**Status:**` block to:
 
@@ -2645,12 +2643,12 @@ AuthService and the session rehydrates on a hard refresh. Deferred to M7
 endpoints yet), inline AQL error squiggles, and editable db settings UI.
 ```
 
-- [ ] **Step 7: Run the full gate**
+- [x] **Step 7: Run the full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green — `tsc -b` builds the libraries (ignoring `apps/web`), the Angular builder builds the app, `typecheck:test` covers the new client test tsconfig, eslint + prettier cover `apps/web/src`, and `pnpm test` runs the library Vitest suite plus the app's `ng test` suite. The e2e is intentionally excluded (run separately via `pnpm e2e:web`).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A

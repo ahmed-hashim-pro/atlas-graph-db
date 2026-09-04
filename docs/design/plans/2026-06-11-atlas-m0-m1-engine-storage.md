@@ -1,14 +1,12 @@
 # Atlas M0+M1 — Scaffold & Engine Storage Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Stand up the Atlas pnpm monorepo (tooling, CI, Docker skeleton) and build the crash-safe storage layer of `@atlas/core`: in-memory property graph store, atomic single-writer transactions, binary WAL with group commit, snapshot rotation, recovery with torn-tail truncation, a kill-the-process crash suite, plus the synthetic graph generator and benchmark harness.
 
 **Architecture:** Committed graph state lives in `GraphStore` (Maps + per-type adjacency sets). All writes flow through one `WriteQueue`; a `TxBuilder` stages and validates ops, which are MessagePack-encoded into a CRC-framed WAL (group commit) before being applied to memory. Snapshots rotate the WAL segment, encode state during a brief write pause, and persist via tmp-file + atomic rename; recovery = newest snapshot + replay of newer WAL segments.
 
 **Tech Stack:** TypeScript (strict, ESM, NodeNext), Node ≥ 22, pnpm workspaces, Vitest, fast-check, `@msgpack/msgpack`, `node:zlib` crc32, tsx, ESLint flat + Prettier, GitHub Actions, Docker.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` (§3 architecture, §4.1–4.4 + parts of 4.3 storage, §8 generator, §10 testing, §12 M0–M1).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` (§3 architecture, §4.1–4.4 + parts of 4.3 storage, §8 generator, §10 testing, §12 M0–M1).
 
 ---
 
@@ -67,7 +65,7 @@ Curated datasets (science-history, movies) are **M2/M4 scope** — only the synt
 **Files:**
 - Create: `pnpm-workspace.yaml`, `package.json`, `tsconfig.base.json`, `tsconfig.json`, `.prettierrc`, `.prettierignore`, `eslint.config.js`, `.nvmrc`
 
-- [ ] **Step 1: Write the workspace files**
+- [x] **Step 1: Write the workspace files**
 
 `pnpm-workspace.yaml`:
 
@@ -166,7 +164,7 @@ export default tseslint.config(
 22
 ```
 
-- [ ] **Step 2: Install root dev tooling**
+- [x] **Step 2: Install root dev tooling**
 
 Run:
 
@@ -176,12 +174,12 @@ pnpm add -D -w typescript vitest eslint typescript-eslint prettier tsx
 
 Expected: `devDependencies` populated, `pnpm-lock.yaml` created.
 
-- [ ] **Step 3: Verify the empty solution builds and formats**
+- [x] **Step 3: Verify the empty solution builds and formats**
 
 Run: `pnpm build && pnpm format`
 Expected: `tsc -b` exits 0 (no projects yet); prettier reports all matched files use Prettier style. (`pnpm lint` becomes meaningful in Task 2 once TS files exist.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -195,7 +193,7 @@ git commit -m "chore(m0): pnpm workspace, TypeScript base config, lint/format to
 - Modify: `tsconfig.json`
 - Test: `packages/core/test/smoke.test.ts`
 
-- [ ] **Step 1: Write the package files**
+- [x] **Step 1: Write the package files**
 
 `packages/core/package.json`:
 
@@ -250,7 +248,7 @@ Update root `tsconfig.json`:
 }
 ```
 
-- [ ] **Step 2: Write the failing smoke test**
+- [x] **Step 2: Write the failing smoke test**
 
 `packages/core/test/smoke.test.ts`:
 
@@ -265,12 +263,12 @@ describe('smoke', () => {
 });
 ```
 
-- [ ] **Step 3: Install, then verify everything is green**
+- [x] **Step 3: Install, then verify everything is green**
 
 Run: `pnpm install && pnpm build && pnpm lint && pnpm format && pnpm test`
 Expected: install links the workspace package; build emits `packages/core/dist/`; lint/format clean; vitest reports `1 passed`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -282,7 +280,7 @@ git commit -m "feat(m0): @atlas/core package skeleton with vitest wiring"
 **Files:**
 - Create: `.github/workflows/ci.yml`
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 `.github/workflows/ci.yml`:
 
@@ -310,12 +308,12 @@ jobs:
       - run: pnpm test
 ```
 
-- [ ] **Step 2: Verify the workflow is well-formed**
+- [x] **Step 2: Verify the workflow is well-formed**
 
 Run: `pnpm exec tsx -e "import { readFileSync } from 'node:fs'; import { parse } from 'yaml'; parse(readFileSync('.github/workflows/ci.yml','utf8')); console.log('yaml ok')"` — if `yaml` isn't installed, `pnpm add -D -w yaml` first.
 Expected: `yaml ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A
@@ -327,7 +325,7 @@ git commit -m "ci(m0): build, lint, format, test on push and PR"
 **Files:**
 - Create: `Dockerfile`, `.dockerignore`
 
-- [ ] **Step 1: Write the files**
+- [x] **Step 1: Write the files**
 
 `Dockerfile`:
 
@@ -358,12 +356,12 @@ docs
 data
 ```
 
-- [ ] **Step 2: Verify (only if Docker is available locally — otherwise skip; CI does not build the image yet)**
+- [x] **Step 2: Verify (only if Docker is available locally — otherwise skip; CI does not build the image yet)**
 
 Run: `docker build -t atlas:dev . && docker run --rm atlas:dev`
 Expected: image builds; container prints the skeleton banner.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A
@@ -381,7 +379,7 @@ git commit -m "chore(m0): multi-stage Dockerfile skeleton"
 - Modify: `packages/core/src/index.ts`
 - Test: `packages/core/test/types.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/types.test.ts`:
 
@@ -424,12 +422,12 @@ describe('validateProps', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/types.test.ts`
 Expected: FAIL — cannot find `../src/errors.js` / `../src/types.js`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/errors.ts`:
 
@@ -540,12 +538,12 @@ export {
 
 (The Task 2 smoke test's `ATLAS_CORE_VERSION` export is gone — update `packages/core/test/smoke.test.ts` to import and assert `typeof AtlasError === 'function'` instead.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/types.test.ts packages/core/test/smoke.test.ts`
 Expected: PASS (all).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -558,7 +556,7 @@ git commit -m "feat(core): AtlasError hierarchy, graph types, property validatio
 - Create: `packages/core/src/interner.ts`
 - Test: `packages/core/test/interner.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/interner.test.ts`:
 
@@ -579,12 +577,12 @@ describe('Interner', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/interner.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/interner.ts`:
 
@@ -614,12 +612,12 @@ export class Interner {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/interner.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -633,7 +631,7 @@ git commit -m "feat(core): string interner for edge-type adjacency keys"
 - Modify: `packages/core/src/index.ts` (add `export { GraphStore } from './store.js';`)
 - Test: `packages/core/test/store.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/store.test.ts`:
 
@@ -684,12 +682,12 @@ describe('GraphStore creation + adjacency', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/store.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/store.ts`:
 
@@ -852,12 +850,12 @@ export class GraphStore {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/store.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -870,7 +868,7 @@ git commit -m "feat(core): GraphStore with typed adjacency and invariant checks"
 - Modify: `packages/core/src/store.ts` (already implemented above — this task locks behavior with tests)
 - Test: `packages/core/test/store-mutation.test.ts`
 
-- [ ] **Step 1: Write the failing-or-passing tests (they pin behavior; some pass immediately, all must be present)**
+- [x] **Step 1: Write the failing-or-passing tests (they pin behavior; some pass immediately, all must be present)**
 
 `packages/core/test/store-mutation.test.ts`:
 
@@ -916,12 +914,12 @@ describe('GraphStore mutations', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `pnpm vitest run packages/core/test/store-mutation.test.ts`
 Expected: PASS (implementation landed in Task 7; if any case fails, fix `store.ts` until green).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A
@@ -934,7 +932,7 @@ git commit -m "test(core): pin GraphStore mutation semantics"
 - Create: `packages/core/src/write-queue.ts`
 - Test: `packages/core/test/write-queue.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/write-queue.test.ts`:
 
@@ -971,12 +969,12 @@ describe('WriteQueue', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/write-queue.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/write-queue.ts`:
 
@@ -992,12 +990,12 @@ export class WriteQueue {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/write-queue.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1011,7 +1009,7 @@ git commit -m "feat(core): single-writer promise queue"
 - Modify: `packages/core/src/index.ts` (add `export { TxBuilder } from './tx.js';`)
 - Test: `packages/core/test/tx.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/tx.test.ts`:
 
@@ -1087,12 +1085,12 @@ describe('TxBuilder', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/tx.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/id-allocator.ts`:
 
@@ -1220,12 +1218,12 @@ export class TxBuilder {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/tx.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1238,7 +1236,7 @@ git commit -m "feat(core): IdAllocator and validating TxBuilder with detach expa
 - Create: `packages/core/src/codec.ts`
 - Test: `packages/core/test/codec.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/codec.test.ts`:
 
@@ -1266,12 +1264,12 @@ describe('batch codec', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/codec.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/codec.ts`:
 
@@ -1288,12 +1286,12 @@ export function decodeBatch(payload: Uint8Array): CommittedBatch {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/codec.test.ts`
 Expected: PASS (msgpack timestamp extension preserves `Date`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1306,7 +1304,7 @@ git commit -m "feat(core): MessagePack batch codec"
 - Create: `packages/core/src/wal.ts` (framing + reader half)
 - Test: `packages/core/test/wal-frame.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/wal-frame.test.ts`:
 
@@ -1365,12 +1363,12 @@ describe('WAL framing', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/wal-frame.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/wal.ts`:
 
@@ -1416,12 +1414,12 @@ export async function readWal(path: string): Promise<WalReadResult> {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/wal-frame.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1434,7 +1432,7 @@ git commit -m "feat(core): CRC-framed WAL encoding and torn-tail-aware reader"
 - Modify: `packages/core/src/wal.ts` (append `WalWriter`)
 - Test: `packages/core/test/wal-writer.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/wal-writer.test.ts`:
 
@@ -1498,12 +1496,12 @@ describe('WalWriter', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/wal-writer.test.ts`
 Expected: FAIL — `WalWriter` not exported.
 
-- [ ] **Step 3: Append the implementation to `packages/core/src/wal.ts`**
+- [x] **Step 3: Append the implementation to `packages/core/src/wal.ts`**
 
 ```ts
 import { open, type FileHandle } from 'node:fs/promises';
@@ -1584,12 +1582,12 @@ export class WalWriter {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/wal-writer.test.ts packages/core/test/wal-frame.test.ts`
 Expected: PASS. The group-commit test must show `syncCount < 20`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1603,7 +1601,7 @@ git commit -m "feat(core): WalWriter with group commit and configurable fsync mo
 - Modify: `packages/core/src/index.ts` (add `export { AtlasDatabase, openDatabase, type OpenOptions } from './database.js';`)
 - Test: `packages/core/test/database.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/database.test.ts`:
 
@@ -1698,12 +1696,12 @@ describe('AtlasDatabase', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/database.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/files.ts`:
 
@@ -1872,12 +1870,12 @@ export class AtlasDatabase {
 export const openDatabase = AtlasDatabase.open.bind(AtlasDatabase);
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/database.test.ts`
 Expected: PASS (all five).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1890,7 +1888,7 @@ git commit -m "feat(core): AtlasDatabase with WAL-backed atomic transactions and
 - Create: `packages/core/src/snapshot.ts`
 - Test: `packages/core/test/snapshot.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/snapshot.test.ts`:
 
@@ -1922,12 +1920,12 @@ describe('snapshot codec', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/snapshot.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `packages/core/src/snapshot.ts`:
 
@@ -1969,12 +1967,12 @@ export function decodeSnapshot(buf: Buffer): SnapshotData {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/snapshot.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1987,7 +1985,7 @@ git commit -m "feat(core): snapshot codec with magic header and id counters"
 - Modify: `packages/core/src/database.ts`
 - Test: `packages/core/test/checkpoint.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/checkpoint.test.ts`:
 
@@ -2061,12 +2059,12 @@ describe('checkpointing', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/checkpoint.test.ts`
 Expected: FAIL — `checkpoint` is not a function.
 
-- [ ] **Step 3: Extend `packages/core/src/database.ts`**
+- [x] **Step 3: Extend `packages/core/src/database.ts`**
 
 Add imports:
 
@@ -2157,12 +2155,12 @@ In `close()`, wait for any in-flight checkpoint first:
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/checkpoint.test.ts packages/core/test/database.test.ts`
 Expected: PASS (checkpoint suite and the Task 14 suite both green).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2174,7 +2172,7 @@ git commit -m "feat(core): snapshot checkpointing with WAL rotation and recovery
 **Files:**
 - Test: `packages/core/test/property.test.ts`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 `packages/core/test/property.test.ts`:
 
@@ -2279,12 +2277,12 @@ describe('storage property tests', () => {
 
 Note: the cast to reach `store` is test-only; make it lighter by adding a `/** test-only */ get internalStore(): GraphStore` accessor on `AtlasDatabase` if the cast offends — either is acceptable, pick one and keep it consistent.
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `pnpm vitest run packages/core/test/property.test.ts`
 Expected: PASS in under ~2 minutes. If fast-check finds a counterexample, it prints the shrunk action sequence — fix the underlying bug (most likely in detach expansion or checkpoint/recovery interplay), do not weaken the property.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A
@@ -2297,7 +2295,7 @@ git commit -m "test(core): property-based invariants over random op sequences wi
 - Create: `packages/core/test/fixtures/crash-writer.ts`
 - Test: `packages/core/test/crash.test.ts`
 
-- [ ] **Step 1: Write the fixture**
+- [x] **Step 1: Write the fixture**
 
 `packages/core/test/fixtures/crash-writer.ts`:
 
@@ -2320,7 +2318,7 @@ for (;;) {
 }
 ```
 
-- [ ] **Step 2: Write the test**
+- [x] **Step 2: Write the test**
 
 `packages/core/test/crash.test.ts`:
 
@@ -2377,12 +2375,12 @@ describe('crash safety', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test**
+- [x] **Step 3: Run the test**
 
 Run: `pnpm vitest run packages/core/test/crash.test.ts`
 Expected: PASS — five kill/recover cycles; auto-checkpoints fire during runs (8 KB threshold), so kills land across WAL-only, mid-checkpoint, and post-checkpoint states.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A
@@ -2396,7 +2394,7 @@ git commit -m "test(core): SIGKILL crash-recovery suite over WAL and checkpoint 
 - Modify: `tsconfig.json` (add reference), `packages/core/package.json` (devDep `"@atlas/datasets": "workspace:*"` — used by bench in Task 20)
 - Test: `packages/datasets/test/generator.test.ts`
 
-- [ ] **Step 1: Write the package files**
+- [x] **Step 1: Write the package files**
 
 `packages/datasets/package.json`:
 
@@ -2430,7 +2428,7 @@ Root `tsconfig.json` references become:
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/datasets/test/generator.test.ts`:
 
@@ -2496,12 +2494,12 @@ describe('generateGraph', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/datasets/test/generator.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 4: Write the implementation**
+- [x] **Step 4: Write the implementation**
 
 `packages/datasets/src/random.ts`:
 
@@ -2581,12 +2579,12 @@ export { mulberry32 } from './random.js';
 
 Add to `packages/core/package.json` devDependencies: `"@atlas/datasets": "workspace:*"`, then `pnpm install`.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm install && pnpm vitest run packages/datasets/test/generator.test.ts && pnpm build`
 Expected: PASS; whole solution still builds.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -2598,7 +2596,7 @@ git commit -m "feat(datasets): deterministic synthetic graph generator with hub 
 **Files:**
 - Create: `packages/core/bench/storage.bench.ts`, `.github/workflows/nightly.yml`
 
-- [ ] **Step 1: Write the harness**
+- [x] **Step 1: Write the harness**
 
 `packages/core/bench/storage.bench.ts`:
 
@@ -2717,12 +2715,12 @@ jobs:
 
 Note: hosted runners (~7 GB RAM) cannot hold the full capacity point — nightly runs SCALE=0.25 for trend tracking; the **budget-asserting SCALE=1 run is a manual/large-runner job** (`ASSERT_BUDGETS=1 SCALE=1`), required before the M7 release sign-off per spec §12.
 
-- [ ] **Step 2: Run the bench at small scale**
+- [x] **Step 2: Run the bench at small scale**
 
 Run: `SCALE=0.01 node --expose-gc --import tsx packages/core/bench/storage.bench.ts`
 Expected: a report table with ~10k nodes / 50k edges, sane numbers, exit 0.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A
@@ -2734,7 +2732,7 @@ git commit -m "feat(core): storage benchmark harness vs spec budgets + nightly C
 **Files:**
 - Create: `README.md`
 
-- [ ] **Step 1: Write the README**
+- [x] **Step 1: Write the README**
 
 `README.md`:
 
@@ -2746,7 +2744,7 @@ A graph database platform in TypeScript: a from-scratch embedded engine
 language) with a multi-user server and the Knowledge Graph Explorer web app.
 
 **Status:** M1 — engine storage layer (crash-safe WAL, snapshots, transactions).
-Design spec: `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md`.
+Design spec: `docs/design/specs/2026-06-10-atlas-graph-platform-design.md`.
 
 ## Develop
 
@@ -2762,12 +2760,12 @@ SCALE=0.05 node --expose-gc --import tsx packages/core/bench/storage.bench.ts
 ```
 ```
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 Run: `pnpm build && pnpm lint && pnpm format && pnpm test`
 Expected: everything green — build clean, zero lint/format violations, all test files passing (smoke, types, interner, store ×2, write-queue, tx, codec, wal ×2, database, snapshot, checkpoint, property, crash, generator).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add -A

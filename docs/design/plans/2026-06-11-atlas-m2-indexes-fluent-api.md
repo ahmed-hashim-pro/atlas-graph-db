@@ -1,14 +1,12 @@
 # Atlas M2 — Indexes + Fluent API Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Add the query-acceleration layer to `@atlas/core` — exact/range/full-text indexes with unique constraints, a label index, the lazy fluent traversal API with read-leased streaming, schema introspection, the change feed — plus the curated science-history dataset, and close out two M1 review carry-overs (directory fsync, test typechecking).
 
 **Architecture:** Index/schema maintenance hooks into `GraphStore.applyOp` *before* each mutation (old values are still readable), so recovery and snapshot-load rebuild them for free. Index definitions are new `Op` variants persisted through the WAL and snapshots. Unique constraints validate in `transact` before the WAL append. The fluent API composes lazy generators over committed state; only `stream()` (which yields to the event loop) takes a read lease that holds the write queue, bounded by a time budget.
 
 **Tech Stack:** Existing M1 stack (TypeScript strict ESM, Vitest, fast-check). No new runtime dependencies; the B+ tree and full-text index are hand-built.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §4.2 (label interning/layout), §4.5 (indexes + constraints), §4.4/§4.7 (read leases), §4.6 (schema introspection), §4.8 (change feed), §5.1 (fluent API), §8 (science-history), §12 M2.
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §4.2 (label interning/layout), §4.5 (indexes + constraints), §4.4/§4.7 (read leases), §4.6 (schema introspection), §4.8 (change feed), §5.1 (fluent API), §8 (science-history), §12 M2.
 
 **Existing code anchors (read these before deviating):** `Op`/`Props`/`validateProps` in `packages/core/src/types.ts`; `GraphStore.applyOp` in `src/store.ts`; `TxBuilder` in `src/tx.ts`; `AtlasDatabase.transact`/`open`/`close` in `src/database.ts`; `SnapshotData` in `src/snapshot.ts`.
 
@@ -59,7 +57,7 @@ M1's final review found that snapshot rename, WAL rotation, and segment cleanup 
 - Modify: `packages/core/src/database.ts`
 - Test: `packages/core/test/files.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/core/test/files.test.ts`:
 
@@ -89,12 +87,12 @@ describe('fsyncDir', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm vitest run packages/core/test/files.test.ts`
 Expected: FAIL — `fsyncDir` is not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `packages/core/src/files.ts`:
 
@@ -134,12 +132,12 @@ In `packages/core/src/database.ts`, import `fsyncDir` from `./files.js` (extend 
     await fsyncDir(this.dir);
 ```
 
-- [ ] **Step 4: Run tests to verify everything passes**
+- [x] **Step 4: Run tests to verify everything passes**
 
 Run: `pnpm vitest run packages/core/test/files.test.ts packages/core/test/checkpoint.test.ts packages/core/test/crash.test.ts`
 Expected: PASS (checkpoint + crash suites confirm no regression).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -154,7 +152,7 @@ Tests and bench are currently outside every tsconfig project: `tsc -b` never see
 - Create: `packages/core/test/tsconfig.json`, `packages/core/bench/tsconfig.json`, `packages/datasets/test/tsconfig.json`
 - Modify: `package.json` (root), `.github/workflows/ci.yml`, plus any test file the new typecheck flags
 
-- [ ] **Step 1: Create the tsconfigs**
+- [x] **Step 1: Create the tsconfigs**
 
 `packages/core/test/tsconfig.json`:
 
@@ -177,7 +175,7 @@ Tests and bench are currently outside every tsconfig project: `tsc -b` never see
 
 `packages/datasets/test/tsconfig.json` — identical content (its `include` paths resolve relative to that directory automatically).
 
-- [ ] **Step 2: Add the script and run it**
+- [x] **Step 2: Add the script and run it**
 
 In root `package.json` scripts add:
 
@@ -194,7 +192,7 @@ Expected: a SMALL number of real errors surface. Known one: `packages/core/test/
 
 Fix every surfaced error **minimally** (casts through `unknown`, missing type annotations). Do not refactor test logic. Re-run until clean.
 
-- [ ] **Step 3: Wire into CI**
+- [x] **Step 3: Wire into CI**
 
 In `.github/workflows/ci.yml`, after the `- run: pnpm build` step add:
 
@@ -202,12 +200,12 @@ In `.github/workflows/ci.yml`, after the `- run: pnpm build` step add:
       - run: pnpm typecheck:test
 ```
 
-- [ ] **Step 4: Full gate**
+- [x] **Step 4: Full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -222,7 +220,7 @@ git commit -m "chore: typecheck test and bench code via dedicated noEmit tsconfi
 - Modify: `packages/core/src/store.ts`
 - Test: `packages/core/test/label-index.test.ts` (new)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/core/test/label-index.test.ts`:
 
@@ -252,12 +250,12 @@ describe('label index', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm vitest run packages/core/test/label-index.test.ts`
 Expected: FAIL — `labelCount` is not a function.
 
-- [ ] **Step 3: Implement in `packages/core/src/store.ts`**
+- [x] **Step 3: Implement in `packages/core/src/store.ts`**
 
 Add a private field next to the adjacency maps:
 
@@ -329,12 +327,12 @@ Extend `checkInvariants()` with a label-index cross-check (append before the dan
       throw new AtlasError('INTERNAL', `label index has ${labelRefs} refs, expected ${expectedRefs}`);
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/label-index.test.ts packages/core/test/store.test.ts packages/core/test/store-mutation.test.ts packages/core/test/property.test.ts`
 Expected: PASS (property suite re-validates invariants over random sequences).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -347,7 +345,7 @@ git commit -m "feat(core): label index with O(1) nodesByLabel and invariant chec
 - Create: `packages/core/src/index/keys.ts`
 - Test: `packages/core/test/keys.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/core/test/keys.test.ts`:
 
@@ -382,12 +380,12 @@ describe('keys', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm vitest run packages/core/test/keys.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/index/keys.ts`:
 
@@ -429,12 +427,12 @@ export function compareValues(a: ScalarValue, b: ScalarValue): number {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm vitest run packages/core/test/keys.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -449,7 +447,7 @@ Order-64 B+ tree mapping `(ScalarValue key, NodeId id)` pairs — duplicate keys
 - Create: `packages/core/src/index/btree.ts`
 - Test: `packages/core/test/btree.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/btree.test.ts`:
 
@@ -552,12 +550,12 @@ describe('BTree vs reference model (property)', () => {
 
 Note: `BTree.insert` treats an exact duplicate `(key, id)` pair as a no-op; the model mirrors that by skipping duplicates.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/btree.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/index/btree.ts`:
 
@@ -715,12 +713,12 @@ export class BTree {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/btree.test.ts`
 Expected: PASS, including the 40-run property test against the reference model. If the property test finds a counterexample, fast-check prints the shrunk action list — debug the tree (likely split-key handling around duplicates), never weaken the model.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -733,7 +731,7 @@ git commit -m "feat(core): in-memory B+ tree with duplicate keys and range scans
 - Create: `packages/core/src/index/property-index.ts`
 - Test: `packages/core/test/property-index.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/property-index.test.ts`:
 
@@ -775,12 +773,12 @@ describe('PropertyIndex', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/property-index.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/index/property-index.ts`:
 
@@ -837,12 +835,12 @@ export class PropertyIndex {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/property-index.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -855,7 +853,7 @@ git commit -m "feat(core): exact+range property index over B+ tree"
 - Create: `packages/core/src/index/fulltext.ts`
 - Test: `packages/core/test/fulltext.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/fulltext.test.ts`:
 
@@ -914,12 +912,12 @@ describe('FulltextIndex', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/fulltext.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/index/fulltext.ts`:
 
@@ -1026,12 +1024,12 @@ export class FulltextIndex {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/fulltext.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1047,7 +1045,7 @@ Index definitions become `Op` variants so the WAL and snapshots persist them; th
 - Create: `packages/core/src/index/registry.ts`
 - Test: `packages/core/test/registry.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/registry.test.ts`:
 
@@ -1121,12 +1119,12 @@ describe('TxBuilder index DDL', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/registry.test.ts`
 Expected: FAIL — `registry.js` missing, `createIndex` not on TxBuilder.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add to `packages/core/src/types.ts` (above `Op`):
 
@@ -1400,12 +1398,12 @@ and two methods:
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/registry.test.ts packages/core/test/store.test.ts packages/core/test/property.test.ts packages/core/test/codec.test.ts`
 Expected: PASS — registry behavior plus no regression in store/property/codec suites (the codec round-trips the new op variants without changes since they're plain data).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1420,7 +1418,7 @@ Constraints must reject a batch **before** the WAL append — a violating batch 
 - Modify: `packages/core/src/index/registry.ts` (add `validateBatch`), `packages/core/src/database.ts` (hook)
 - Test: `packages/core/test/constraints.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/constraints.test.ts`:
 
@@ -1514,12 +1512,12 @@ describe('unique constraints', () => {
 
 (`db.listIndexes()` arrives in Task 10 — for THIS task stub it onto `AtlasDatabase` now as specified in Step 3; Task 10 keeps it.)
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/constraints.test.ts`
 Expected: FAIL — duplicates are accepted (no `validateBatch` yet).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `IndexRegistry` in `packages/core/src/index/registry.ts`:
 
@@ -1633,12 +1631,12 @@ And add the accessor the tests use (kept by Task 10):
 
 (import `IndexDef` as a type from `./types.js`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/constraints.test.ts packages/core/test/database.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1651,7 +1649,7 @@ git commit -m "feat(core): unique constraints validated before WAL append"
 - Modify: `packages/core/src/snapshot.ts`, `packages/core/src/database.ts`
 - Test: `packages/core/test/index-persistence.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/index-persistence.test.ts`:
 
@@ -1709,12 +1707,12 @@ describe('index persistence', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/index-persistence.test.ts`
 Expected: FAIL — `createIndex` is not a method on `AtlasDatabase` (and snapshots drop defs).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `packages/core/src/snapshot.ts`: add to `SnapshotData`:
 
@@ -1771,12 +1769,12 @@ Add the database-level API next to `listIndexes()`:
 
 (imports: `type ScalarValue` from `./index/keys.js`, `type RangeQuery` from `./index/property-index.js`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/index-persistence.test.ts packages/core/test/checkpoint.test.ts packages/core/test/crash.test.ts packages/core/test/property.test.ts`
 Expected: PASS — persistence works and the M1 durability suites still hold with the registry in the apply path.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1791,7 +1789,7 @@ Spec §4.4/§4.7: long reads hold the write queue (point-in-time consistency at 
 - Modify: `packages/core/src/database.ts`
 - Test: `packages/core/test/lease.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/lease.test.ts`:
 
@@ -1861,12 +1859,12 @@ describe('read leases', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/lease.test.ts`
 Expected: FAIL — `acquireReadLease` is not a function.
 
-- [ ] **Step 3: Implement in `packages/core/src/database.ts`**
+- [x] **Step 3: Implement in `packages/core/src/database.ts`**
 
 Add the public type (top of file, after `OpenOptions`):
 
@@ -1919,12 +1917,12 @@ Add the method (near `transact`):
 
 Note for `close()`: an unreleased lease delays `close()` until its budget expires — that is intentional (same contract as a long write); tests use small budgets.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/lease.test.ts packages/core/test/database.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1940,7 +1938,7 @@ Lazy generator pipeline over committed state. `where` predicates receive `(props
 - Modify: `packages/core/src/database.ts` (add `graph()`)
 - Test: `packages/core/test/traversal.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/traversal.test.ts`:
 
@@ -2033,12 +2031,12 @@ describe('fluent traversal — nodes', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/traversal.test.ts`
 Expected: FAIL — `graph` is not a function.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/traversal/traversal.ts`:
 
@@ -2305,12 +2303,12 @@ import { GraphView } from './traversal/traversal.js';
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/traversal.test.ts`
 Expected: PASS, including the laziness assertion (`predCalls === 1`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2323,7 +2321,7 @@ git commit -m "feat(core): fluent traversal API — lazy node/edge pipelines wit
 - Modify: `packages/core/src/traversal/traversal.ts` (extend `GraphView`)
 - Test: `packages/core/test/traversal-extended.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/traversal-extended.test.ts`:
 
@@ -2411,12 +2409,12 @@ describe('edge steps and paths', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/traversal-extended.test.ts`
 Expected: FAIL — `nodesWhere`/`search` missing.
 
-- [ ] **Step 3: Implement — extend `GraphView` in `packages/core/src/traversal/traversal.ts`**
+- [x] **Step 3: Implement — extend `GraphView` in `packages/core/src/traversal/traversal.ts`**
 
 Add imports at the top:
 
@@ -2466,12 +2464,12 @@ Add to `GraphView`:
 
 (`isScalar` guards the Date-vs-RangeQuery ambiguity: a `Date` is `typeof 'object'`, hence the explicit `instanceof` check above. If the imported `isScalar` ends up unused after writing this, drop the import.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/traversal-extended.test.ts packages/core/test/traversal.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2486,7 +2484,7 @@ The one traversal terminal that yields to the event loop, so it takes a read lea
 - Modify: `packages/core/src/traversal/traversal.ts`, `packages/core/src/database.ts`
 - Test: `packages/core/test/stream.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/stream.test.ts`:
 
@@ -2551,12 +2549,12 @@ describe('stream()', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/stream.test.ts`
 Expected: FAIL — `stream` is not a function.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Traversals need the database's lease machinery, not just the store. Thread a lease factory through `GraphView` — in `packages/core/src/traversal/traversal.ts`:
 
@@ -2613,12 +2611,12 @@ const STREAM_YIELD_EVERY = 1000;
 
 (`AtlasDatabase` already satisfies `LeaseProvider` structurally via Task 11's `acquireReadLease`.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/stream.test.ts packages/core/test/traversal.test.ts packages/core/test/traversal-extended.test.ts packages/core/test/lease.test.ts`
 Expected: PASS — including the early-break lease release (the `finally` in the generator runs on `break` via iterator `return()`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2634,7 +2632,7 @@ Observed-schema statistics maintained incrementally in the same before-mutation 
 - Modify: `packages/core/src/store.ts`, `packages/core/src/database.ts`
 - Test: `packages/core/test/schema.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/schema.test.ts`:
 
@@ -2715,12 +2713,12 @@ describe('schema introspection', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/schema.test.ts`
 Expected: FAIL — `schema` is not a function.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/schema.ts`:
 
@@ -2932,12 +2930,12 @@ In `packages/core/src/database.ts`:
 
 (import `type SchemaSummary` from `./schema.js`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/schema.test.ts packages/core/test/property.test.ts packages/core/test/crash.test.ts`
 Expected: PASS — property/crash suites confirm the tracker never desyncs or breaks recovery.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2953,7 +2951,7 @@ Bounded ring buffer of committed batches; subscriptions deliver asynchronously (
 - Modify: `packages/core/src/database.ts`
 - Test: `packages/core/test/change-feed.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/change-feed.test.ts`:
 
@@ -3054,12 +3052,12 @@ describe('database integration', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/change-feed.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/change-feed.ts`:
 
@@ -3173,12 +3171,12 @@ And the public API:
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/change-feed.test.ts packages/core/test/database.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -3194,7 +3192,7 @@ Curated core of real entities (people, concepts, documents, places with real rel
 - Modify: `packages/datasets/src/index.ts`
 - Test: `packages/datasets/test/science-history.test.ts`, `packages/core/test/dataset-load.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/datasets/test/science-history.test.ts`:
 
@@ -3304,12 +3302,12 @@ describe('science-history into a real database', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/datasets/test/science-history.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/datasets/src/science-history.ts`:
 
@@ -3531,12 +3529,12 @@ export {
 } from './science-history.js';
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm build && pnpm vitest run packages/datasets/test/science-history.test.ts packages/core/test/dataset-load.test.ts`
 Expected: PASS (`pnpm build` first so `@atlas/datasets` dist exists for the core-side import). The KNOWS/INFLUENCED index pairs reference the PEOPLE array — if an index is out of range the endpoint test fails loudly; fix the table, not the test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -3548,7 +3546,7 @@ git commit -m "feat(datasets): curated science-history dataset with deterministi
 **Files:**
 - Modify: `packages/core/src/index.ts`, `README.md`
 
-- [ ] **Step 1: Extend the public surface**
+- [x] **Step 1: Extend the public surface**
 
 Replace `packages/core/src/index.ts` with:
 
@@ -3589,7 +3587,7 @@ export {
 } from './types.js';
 ```
 
-- [ ] **Step 2: Update the README status block**
+- [x] **Step 2: Update the README status block**
 
 In `README.md`, change the `**Status:**` line to:
 
@@ -3599,7 +3597,7 @@ traversal API with leased streaming, schema introspection, change feed,
 science-history dataset.
 ```
 
-- [ ] **Step 3: Full gate + bench smoke**
+- [x] **Step 3: Full gate + bench smoke**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green.
@@ -3607,7 +3605,7 @@ Expected: all green.
 Run: `SCALE=0.01 node --expose-gc --import tsx packages/core/bench/storage.bench.ts`
 Expected: exits 0 — confirms the registry/schema hooks in the apply path didn't wreck write throughput (expect some slowdown vs M1; anything above ~30% off the M1 numbers at this scale deserves a look before committing).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add -A

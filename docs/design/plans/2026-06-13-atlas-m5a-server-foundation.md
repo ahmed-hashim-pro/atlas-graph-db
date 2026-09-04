@@ -1,14 +1,12 @@
 # Atlas M5a — Server Foundation Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Stand up the Atlas server's foundation: the shared `@atlas/protocol` wire-schema package, the `@atlas/server` Fastify app with argon2id auth (sessions + API tokens), a lazily-loaded multi-database manager whose system catalog is itself an Atlas graph database, and the core REST endpoints (auth, database lifecycle, query, schema) with the spec's permission matrix enforced.
 
 **Architecture:** `@atlas/protocol` holds zod request/response schemas + wire types, depended on by both server and (M5b) client — no server imports leak to the client. `@atlas/server` composes a Fastify app via a `buildServer(deps)` factory (testable with `.inject()`, no real socket). Auth identities, API tokens, the database registry, and per-database role grants live in a dedicated "catalog" Atlas database (dogfooding the engine). A `DatabaseManager` opens user databases lazily into per-name data directories and drains them on shutdown. Every protected route runs an auth preHandler (session cookie or bearer token) then a permission check against the matrix.
 
 **Tech Stack:** Existing stack + Fastify 5, `@fastify/cookie` (signed session cookies), `@node-rs/argon2` (prebuilt argon2id, no native compiler), zod 3. HTTP tests use Fastify `.inject()`. WebSocket subscriptions, node/edge CRUD, import/export, the client SDK, metrics, rate-limiting, and static hosting are **M5b — out of scope here.**
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §6.1 (Fastify, zod, RFC 7807 errors carrying AtlasError codes), §6.2 (argon2id, sessions + bearer tokens, the permission matrix — normative), §6.3 (lazy per-db engines, catalog-as-Atlas-db, SIGTERM drain), §6.4 (endpoint table — M5a does auth/databases/query/schema/healthz; the rest is M5b).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §6.1 (Fastify, zod, RFC 7807 errors carrying AtlasError codes), §6.2 (argon2id, sessions + bearer tokens, the permission matrix — normative), §6.3 (lazy per-db engines, catalog-as-Atlas-db, SIGTERM drain), §6.4 (endpoint table — M5a does auth/databases/query/schema/healthz; the rest is M5b).
 
 **Existing code anchors:**
 - `@atlas/core`: `openDatabase(dir, opts?) → Promise<AtlasDatabase>`; `AtlasDatabase` has `transact(fn)`, `graph()`, `graphStore`, `schema()`, `createIndex/dropIndex/listIndexes`, `close()`, `getNode`, `nodesByLabel`; `AtlasError { code, message }` with codes incl. `CONSTRAINT_VIOLATION`, `NOT_FOUND`, `VALIDATION`, `TIMEOUT`.
@@ -64,7 +62,7 @@ Conventions: ESM `.js` imports; commits end with a blank line then `Co-Authored-
 - Modify: root `tsconfig.json`, root `package.json`
 - Test: `packages/protocol/test/wire.test.ts`
 
-- [ ] **Step 1: Write the package files**
+- [x] **Step 1: Write the package files**
 
 `packages/protocol/package.json`:
 
@@ -115,7 +113,7 @@ Root `tsconfig.json` references gains `{ "path": "packages/protocol" }`. Root `p
 export * from './wire.js';
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/protocol/test/wire.test.ts`:
 
@@ -166,12 +164,12 @@ describe('wire schemas', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm install && pnpm vitest run packages/protocol/test/wire.test.ts`
 Expected: FAIL — `../src/wire.js` not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/protocol/src/wire.ts`:
 
@@ -256,12 +254,12 @@ export interface QueryResponse {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/protocol/test/wire.test.ts && pnpm build`
 Expected: PASS; build clean with the new package reference.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -275,7 +273,7 @@ git commit -m "feat(protocol): @atlas/protocol wire schemas and problem-details 
 - Modify: root `tsconfig.json`, root `package.json`
 - Test: `packages/server/test/errors.test.ts`, `packages/server/test/config.test.ts`
 
-- [ ] **Step 1: Write the package files**
+- [x] **Step 1: Write the package files**
 
 `packages/server/package.json`:
 
@@ -320,7 +318,7 @@ git commit -m "feat(protocol): @atlas/protocol wire schemas and problem-details 
 
 Root `tsconfig.json` references gains `{ "path": "packages/server" }`. Root `package.json` `typecheck:test` appends ` && tsc -p packages/server/test/tsconfig.json`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/server/test/config.test.ts`:
 
@@ -392,12 +390,12 @@ describe('toProblem', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm install && pnpm vitest run packages/server/test/config.test.ts packages/server/test/errors.test.ts`
 Expected: FAIL — modules not found (install links the new deps first).
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/server/src/config.ts`:
 
@@ -523,12 +521,12 @@ export { loadConfig, type ServerConfig } from './config.js';
 export { toProblem, HttpError } from './errors.js';
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/config.test.ts packages/server/test/errors.test.ts && pnpm build`
 Expected: PASS; build clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -541,7 +539,7 @@ git commit -m "feat(server): scaffold, config loader, error-to-problem mapping"
 - Create: `packages/server/src/crypto.ts`
 - Test: `packages/server/test/crypto.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/crypto.test.ts`:
 
@@ -581,12 +579,12 @@ describe('API tokens', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/crypto.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/server/src/crypto.ts`:
 
@@ -629,12 +627,12 @@ export async function verifyToken(storedHash: string, token: string): Promise<bo
 
 Note on token lookup: since argon2id is salted, the server cannot hash an incoming token to find its row directly. The token format is `<id>.<secret>`: `generateToken` returns the secret only; the token CRUD route (Task 8) prepends the catalog token-id, so the client sends `id.secret`, the server looks up the row by `id`, then `verifyToken(row.hash, secret)`. Adjust `generateToken` callers accordingly in Task 8 — `crypto.ts` stays as above (it mints and verifies the secret half).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/crypto.test.ts`
 Expected: PASS (argon2id hashing may take ~50ms/op — fine).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -649,7 +647,7 @@ The catalog is a normal Atlas database at `<dataDir>/_catalog`. Schema: `User {u
 - Create: `packages/server/src/catalog.ts`
 - Test: `packages/server/test/catalog.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/catalog.test.ts`:
 
@@ -739,12 +737,12 @@ describe('persistence', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/catalog.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/server/src/catalog.ts`:
 
@@ -965,12 +963,12 @@ function nowIso(): string {
 
 Note: `nowIso()` is stubbed to a fixed instant because the engine/test environment forbids `Date.now()` in some contexts and timestamps are not asserted in M5a. The implementer may instead accept an injected clock; a fixed value is acceptable for v1 (timestamps are display-only metadata here). Use `new Date().toISOString()` in the real server entry if the runtime allows it — keep tests deterministic by not asserting timestamp values.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/catalog.test.ts`
 Expected: PASS — including unique-username rejection and reopen persistence.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -983,7 +981,7 @@ git commit -m "feat(server): system catalog as a dogfooded Atlas database"
 - Create: `packages/server/src/db-manager.ts`, `packages/server/src/auth.ts`, `packages/server/src/app.ts`
 - Test: `packages/server/test/app-base.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/app-base.test.ts`:
 
@@ -1050,12 +1048,12 @@ describe('app base', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/app-base.test.ts`
 Expected: FAIL — `app.js` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/server/src/db-manager.ts`:
 
@@ -1310,12 +1308,12 @@ export async function registerQueryRoutes(_app: FastifyInstance, _ctx: AppContex
 
 (and the analogous `registerTokenRoutes`).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/app-base.test.ts && pnpm build`
 Expected: PASS — healthz, 401 on `/api/db`, 404 shape, and admin bootstrap login.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1328,7 +1326,7 @@ git commit -m "feat(server): database manager, app factory, auth preHandler, log
 - Modify: `packages/server/src/routes/auth.ts`
 - Test: `packages/server/test/auth-routes.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/auth-routes.test.ts`:
 
@@ -1425,12 +1423,12 @@ describe('auth routes', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/auth-routes.test.ts`
 Expected: FAIL — register/logout/whoami not implemented.
 
-- [ ] **Step 3: Implement — extend `packages/server/src/routes/auth.ts`**
+- [x] **Step 3: Implement — extend `packages/server/src/routes/auth.ts`**
 
 Add register/logout/whoami to `registerAuthRoutes` (keep the existing login handler):
 
@@ -1462,12 +1460,12 @@ import { hashPassword, verifyPassword } from '../crypto.js';
 
 The `createUser` unique-violation already maps to 409 via `toProblem` (CONSTRAINT_VIOLATION → 409). Zod parse errors must map to 400 — ensure the error handler catches `ZodError`: in `toProblem`, add a branch returning 400 with code `VALIDATION` when `err` is a `ZodError` (import `ZodError` from `zod`). Add that branch now.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/auth-routes.test.ts packages/server/test/errors.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1480,7 +1478,7 @@ git commit -m "feat(server): register/logout/whoami routes; ZodError → 400 map
 - Modify: `packages/server/src/routes/databases.ts`
 - Test: `packages/server/test/database-routes.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/database-routes.test.ts`:
 
@@ -1585,12 +1583,12 @@ describe('database routes', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/database-routes.test.ts`
 Expected: FAIL — only `GET /api/db` exists.
 
-- [ ] **Step 3: Implement — replace `packages/server/src/routes/databases.ts`**
+- [x] **Step 3: Implement — replace `packages/server/src/routes/databases.ts`**
 
 ```ts
 import { rm } from 'node:fs/promises';
@@ -1664,12 +1662,12 @@ export async function registerDatabaseRoutes(app: FastifyInstance, ctx: AppConte
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/database-routes.test.ts`
 Expected: PASS — the full matrix: owner-create, grant/revoke, owner-only delete, 403s.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1682,7 +1680,7 @@ git commit -m "feat(server): database lifecycle + role grant routes with permiss
 - Modify: `packages/server/src/routes/query.ts`, `packages/server/src/routes/tokens.ts`
 - Test: `packages/server/test/query-routes.test.ts`, `packages/server/test/token-routes.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/query-routes.test.ts`:
 
@@ -1849,12 +1847,12 @@ describe('API tokens', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/query-routes.test.ts packages/server/test/token-routes.test.ts`
 Expected: FAIL — query/token routes are stubs.
 
-- [ ] **Step 3: Implement — `packages/server/src/routes/query.ts`**
+- [x] **Step 3: Implement — `packages/server/src/routes/query.ts`**
 
 ```ts
 import { dbNameSchema, QueryReq } from '@atlas/protocol';
@@ -1937,12 +1935,12 @@ export async function registerTokenRoutes(app: FastifyInstance, ctx: AppContext)
 
 Note: `authenticate` (Task 5) already parses the `id.secret` Bearer format and verifies via `verifyToken(row.hash, secret)`. Confirm the token route returns `tokenId.secret` so the two halves line up.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/query-routes.test.ts packages/server/test/token-routes.test.ts`
 Expected: PASS — role gating by statement type, EXPLAIN as read, Bearer auth, revocation.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1955,7 +1953,7 @@ git commit -m "feat(server): role-gated query + schema routes and API token CRUD
 - Modify: `packages/server/src/index.ts`, `README.md`
 - Create: `packages/server/src/start.ts`, `packages/server/test/e2e.test.ts`
 
-- [ ] **Step 1: Write the end-to-end test**
+- [x] **Step 1: Write the end-to-end test**
 
 `packages/server/test/e2e.test.ts`:
 
@@ -2021,12 +2019,12 @@ describe('server e2e', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails (or passes — it exercises only existing routes)**
+- [x] **Step 2: Run the test to verify it fails (or passes — it exercises only existing routes)**
 
 Run: `pnpm vitest run packages/server/test/e2e.test.ts`
 Expected: PASS if Tasks 5–8 are complete (this is a coverage capstone over existing routes). If it fails, fix the implicated route — do not weaken the test.
 
-- [ ] **Step 3: Implement the server entry**
+- [x] **Step 3: Implement the server entry**
 
 `packages/server/src/start.ts`:
 
@@ -2059,7 +2057,7 @@ export { CatalogService } from './catalog.js';
 export { DatabaseManager } from './db-manager.js';
 ```
 
-- [ ] **Step 4: Update README + run the full gate**
+- [x] **Step 4: Update README + run the full gate**
 
 In `README.md`, set the `**Status:**` block to:
 
@@ -2074,7 +2072,7 @@ import/export, the client SDK, and metrics land in M5b.
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green across all six packages.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

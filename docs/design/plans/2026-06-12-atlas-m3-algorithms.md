@@ -1,14 +1,12 @@
 # Atlas M3 — Algorithms Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Implement the spec §4.7 algorithm set as `db.algo.*` — BFS/DFS, Dijkstra/A* shortest paths, all-shortest-paths, degree, weak/strong components, topological sort, cycle detection, PageRank, Louvain communities, Brandes betweenness with sampling — all running under read leases with cooperative yielding and time budgets; plus the two M2-review carry-overs (deep index/schema invariants, randomized DDL coverage).
 
 **Architecture:** Each algorithm is a standalone pure-ish function `(store, ticker, opts)` in `packages/core/src/algo/`, unit-testable without leases; the `AlgoFacade` (reached as `db.algo`) wraps every call in `withAlgoLease` — one read lease per invocation, a `Ticker` that yields to the event loop every N operations and aborts with `TIMEOUT` when the lease budget expires. Algorithms are read-only by contract: calling `db.transact` inside one deadlocks until the budget expires (documented).
 
 **Tech Stack:** Existing stack (TypeScript strict ESM, Vitest, fast-check). No new dependencies; the binary heap is hand-built.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §4.7 (algorithm set, leases, yielding, Brandes guard), §5.2 CALL signature table (parameter names and YIELD columns are normative for the facade), §12 M3.
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §4.7 (algorithm set, leases, yielding, Brandes guard), §5.2 CALL signature table (parameter names and YIELD columns are normative for the facade), §12 M3.
 
 **Existing code anchors:** `acquireReadLease`/`ReadLease` in `packages/core/src/database.ts`; `LeaseProvider` in `src/traversal/traversal.ts`; `GraphStore.outEdges/inEdges/degree/nodes/edges` in `src/store.ts`; `IndexRegistry` in `src/index/registry.ts` (private `entries: Map<string, Entry>` where `Entry = { def, property?, fulltext? }`); `SchemaTracker` in `src/schema.ts`; property suite actions in `test/property.test.ts`; crash fixture `test/fixtures/crash-writer.ts`.
 
@@ -60,7 +58,7 @@ Conventions carried from M0–M2: ESM imports use `.js` extensions; commits end 
 - Modify: `packages/core/src/index/registry.ts`, `packages/core/src/index/fulltext.ts`, `packages/core/src/schema.ts`, `packages/core/src/store.ts`
 - Test: `packages/core/test/invariants-deep.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/invariants-deep.test.ts`:
 
@@ -123,12 +121,12 @@ describe('deep invariants', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/invariants-deep.test.ts`
 Expected: the two desync tests FAIL (nothing throws — `checkInvariants` doesn't see postings yet). The healthy-store tests pass already.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `packages/core/src/index/fulltext.ts`, add introspection (below `tokenCount`):
 
@@ -232,12 +230,12 @@ In `packages/core/src/store.ts`, append to the END of `checkInvariants()`:
     this.schema.checkInvariants(this);
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/invariants-deep.test.ts packages/core/test/property.test.ts packages/core/test/crash.test.ts packages/core/test/registry.test.ts`
 Expected: PASS — the property and crash suites now implicitly deep-check on every run (they call `checkInvariants`); if any of them fail, a REAL hook desync existed — investigate before papering over.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -249,7 +247,7 @@ git commit -m "feat(core): deep invariant checks for index postings and schema c
 **Files:**
 - Modify: `packages/core/test/property.test.ts`, `packages/core/test/fixtures/crash-writer.ts`, `packages/core/test/crash.test.ts`
 
-- [ ] **Step 1: Extend the property-test action union**
+- [x] **Step 1: Extend the property-test action union**
 
 In `packages/core/test/property.test.ts`, replace the `Action` type and `actionArb` with:
 
@@ -300,12 +298,12 @@ Notes for the implementer: `setProps` writes `{ v: a.pick }` (numbers) so unique
 
 (Capture `db.listIndexes()` into a `defsBefore` variable **before** `db.close()`, mirroring how `before` captures stats.)
 
-- [ ] **Step 2: Run the property suite**
+- [x] **Step 2: Run the property suite**
 
 Run: `pnpm vitest run packages/core/test/property.test.ts`
 Expected: PASS in a few minutes. A failure here is a shrunk counterexample exposing a real registry/recovery bug — debug it (most likely suspects: unique-rejection rollback paths or drop-then-create within one batch), never weaken the property.
 
-- [ ] **Step 3: Add an index to the crash fixture**
+- [x] **Step 3: Add an index to the crash fixture**
 
 In `packages/core/test/fixtures/crash-writer.ts`, after `const db = await openDatabase(...)`:
 
@@ -320,12 +318,12 @@ In `packages/core/test/crash.test.ts`, after the `(db as unknown as { store: Gra
     expect(db.listIndexes()).toHaveLength(1);
 ```
 
-- [ ] **Step 4: Run the crash suite**
+- [x] **Step 4: Run the crash suite**
 
 Run: `pnpm vitest run packages/core/test/crash.test.ts`
 Expected: PASS — five SIGKILL cycles now recover index definitions and deep-validate postings every time.
 
-- [ ] **Step 5: Full gate, then commit**
+- [x] **Step 5: Full gate, then commit**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green.
@@ -341,7 +339,7 @@ git commit -m "test(core): randomized index DDL in property suite; crash fixture
 - Create: `packages/core/src/algo/heap.ts`, `packages/core/src/algo/runner.ts`
 - Test: `packages/core/test/heap.test.ts`, runner behavior is covered inside `packages/core/test/algo-traverse.test.ts` (Task 4) — heap gets its own tests now.
 
-- [ ] **Step 1: Write the failing heap tests**
+- [x] **Step 1: Write the failing heap tests**
 
 `packages/core/test/heap.test.ts`:
 
@@ -377,12 +375,12 @@ describe('MinHeap', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/heap.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/heap.ts`:
 
@@ -512,12 +510,12 @@ export function requireNode(store: GraphStore, id: NodeId): void {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/heap.test.ts && pnpm build`
 Expected: PASS; build clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -531,7 +529,7 @@ git commit -m "feat(core): algorithm infrastructure — MinHeap, lease ticker, n
 - Modify: `packages/core/src/database.ts` (add `algo` getter)
 - Test: `packages/core/test/algo-traverse.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-traverse.test.ts`:
 
@@ -617,12 +615,12 @@ describe('algo.degree', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-traverse.test.ts`
 Expected: FAIL — `db.algo` undefined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/traverse.ts`:
 
@@ -758,12 +756,12 @@ import { AlgoFacade } from './algo/facade.js';
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-traverse.test.ts packages/core/test/lease.test.ts`
 Expected: PASS — including the `budgetMs: 0` TIMEOUT path (the lease expires before the first `tick`).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -777,7 +775,7 @@ git commit -m "feat(core): bfs/dfs/degree algorithms behind a leased db.algo fac
 - Modify: `packages/core/src/algo/facade.ts`
 - Test: `packages/core/test/algo-paths.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-paths.test.ts`:
 
@@ -868,12 +866,12 @@ describe('algo.allShortestPaths', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-paths.test.ts`
 Expected: FAIL — `shortestPath` is not a function.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/shortest-path.ts`:
 
@@ -1013,12 +1011,12 @@ Add to `AlgoFacade` in `packages/core/src/algo/facade.ts` (new imports: `shortes
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-paths.test.ts`
 Expected: PASS — including the negative-weight rejection and the two-way tie in `allShortestPaths`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1032,7 +1030,7 @@ git commit -m "feat(core): Dijkstra/A* shortest path and all-shortest-paths algo
 - Modify: `packages/core/src/algo/facade.ts`
 - Test: `packages/core/test/algo-components.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-components.test.ts`:
 
@@ -1103,12 +1101,12 @@ describe('algo.components', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-components.test.ts`
 Expected: FAIL — `components` is not a function.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/components.ts`:
 
@@ -1219,12 +1217,12 @@ Add to `AlgoFacade` (import `components`, `type ComponentsOptions` from `./compo
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-components.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1238,7 +1236,7 @@ git commit -m "feat(core): weak and strong connected components (iterative Tarja
 - Modify: `packages/core/src/algo/facade.ts`
 - Test: `packages/core/test/algo-dag.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-dag.test.ts`:
 
@@ -1338,12 +1336,12 @@ describe('algo.cycles', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-dag.test.ts`
 Expected: FAIL — module/method missing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/dag.ts`:
 
@@ -1463,12 +1461,12 @@ Add to `AlgoFacade` (import `topoSort`, `cycles` from `./dag.js`):
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-dag.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1482,7 +1480,7 @@ git commit -m "feat(core): topological sort and bounded cycle detection"
 - Modify: `packages/core/src/algo/facade.ts`
 - Test: `packages/core/test/algo-pagerank.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-pagerank.test.ts`:
 
@@ -1549,12 +1547,12 @@ describe('algo.pagerank', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-pagerank.test.ts`
 Expected: FAIL — method missing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/pagerank.ts`:
 
@@ -1621,12 +1619,12 @@ Add to `AlgoFacade` (import `pagerank`, `type PagerankOptions` from `./pagerank.
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-pagerank.test.ts`
 Expected: PASS — uniform cycle, hub dominance, sum-to-1 conservation.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1642,7 +1640,7 @@ Undirected, weight-1 view (parallel edges accumulate weight; self-loops count do
 - Modify: `packages/core/src/algo/facade.ts`
 - Test: `packages/core/test/algo-louvain.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-louvain.test.ts`:
 
@@ -1707,12 +1705,12 @@ describe('algo.louvain', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-louvain.test.ts`
 Expected: FAIL — method missing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/louvain.ts`:
 
@@ -1847,12 +1845,12 @@ Add to `AlgoFacade` (import `louvain`, `type LouvainOptions` from `./louvain.js`
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-louvain.test.ts`
 Expected: PASS. If the two-clique test flakes toward one community, the gain comparison or `commTot` bookkeeping has a sign bug — debug, don't loosen.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1866,7 +1864,7 @@ git commit -m "feat(core): Louvain community detection (deterministic local move
 - Modify: `packages/core/src/algo/facade.ts`
 - Test: `packages/core/test/algo-betweenness.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/core/test/algo-betweenness.test.ts`:
 
@@ -1948,12 +1946,12 @@ describe('algo.betweenness', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/core/test/algo-betweenness.test.ts`
 Expected: FAIL — method missing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/core/src/algo/betweenness.ts`:
 
@@ -2048,12 +2046,12 @@ Add to `AlgoFacade` (import `betweenness`, `type BetweennessOptions` from `./bet
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/core/test/algo-betweenness.test.ts`
 Expected: PASS — exact pair counts on the path graph and split credit on the diamond pin the delta accumulation.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -2066,7 +2064,7 @@ git commit -m "feat(core): Brandes betweenness with exact guard and deterministi
 - Modify: `packages/core/src/index.ts`, `README.md`, `.github/workflows/nightly.yml`
 - Create: `packages/core/test/algo-dataset.test.ts`, `packages/core/bench/algo.bench.ts`
 
-- [ ] **Step 1: Export the algorithm surface**
+- [x] **Step 1: Export the algorithm surface**
 
 Add to `packages/core/src/index.ts`:
 
@@ -2079,7 +2077,7 @@ export {
 } from './algo/runner.js';
 ```
 
-- [ ] **Step 2: Write the dataset smoke test**
+- [x] **Step 2: Write the dataset smoke test**
 
 `packages/core/test/algo-dataset.test.ts`:
 
@@ -2133,7 +2131,7 @@ describe('algorithms over science-history (500 nodes)', () => {
 Run: `pnpm build && pnpm vitest run packages/core/test/algo-dataset.test.ts`
 Expected: PASS in a few seconds.
 
-- [ ] **Step 3: Write the algo bench + nightly lane**
+- [x] **Step 3: Write the algo bench + nightly lane**
 
 `packages/core/bench/algo.bench.ts`:
 
@@ -2199,7 +2197,7 @@ In `.github/workflows/nightly.yml`, add after the storage bench step:
 Run locally: `SCALE=0.01 node --expose-gc --import tsx packages/core/bench/algo.bench.ts`
 Expected: exits 0 with a timing table (10k nodes / 50k edges — all five algorithms in seconds).
 
-- [ ] **Step 4: README + full gate**
+- [x] **Step 4: README + full gate**
 
 In `README.md`, update the `**Status:**` block to:
 
@@ -2213,7 +2211,7 @@ cooperative yielding and budgets.
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

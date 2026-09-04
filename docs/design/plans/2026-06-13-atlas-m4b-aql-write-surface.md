@@ -1,14 +1,12 @@
 # Atlas M4b — AQL Write Surface Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Complete AQL — add the write surface to `@atlas/query`: `CREATE`/`MERGE` (Cypher whole-pattern semantics with `ON CREATE SET`/`ON MATCH SET`)/`SET`/`REMOVE`/`DELETE`/`DETACH DELETE`, schema DDL (`CREATE INDEX`/`FULLTEXT INDEX`/`UNIQUE CONSTRAINT`, `DROP`, `SHOW`), and `CALL algo.<name>(...) YIELD ...` — all executing atomically inside `db.transact`, with `EXPLAIN` support and an AQL reference doc.
 
 **Architecture:** The parser grows from "MATCH-only" to a statement dispatcher: a query is a read query (M4a), a standalone DDL/CALL statement, or a `[MATCH ...] (CREATE|MERGE|SET|REMOVE|DELETE)+ [RETURN ...]` write query. Writes compile to a `WritePlan` and run inside a single `db.transact` callback (atomic, WAL-durable) by driving the existing `TxBuilder`; the read-side binding engine from M4a (`runRead`'s generators) is reused to produce the rows that writes operate on. `executeQuery` becomes the one entry point routing read/write/DDL/CALL.
 
 **Tech Stack:** Existing stack. No new packages or dependencies — M4b only extends `@atlas/query` (`ast.ts`, `parser.ts`, `plan.ts`, `exec.ts`, `api.ts`) plus new `write.ts`/`ddl.ts`/`call.ts` modules.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §5.2 — the MERGE normative subsection (whole-pattern match-or-create, ON CREATE/ON MATCH SET in scope, once per binding row, unique-constraint interaction), the Schema DDL list (owner-only enforcement is M5/server scope — here DDL just executes), and the `CALL algo.*` signature table (parameter names + YIELD columns are normative).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §5.2 — the MERGE normative subsection (whole-pattern match-or-create, ON CREATE/ON MATCH SET in scope, once per binding row, unique-constraint interaction), the Schema DDL list (owner-only enforcement is M5/server scope — here DDL just executes), and the `CALL algo.*` signature table (parameter names + YIELD columns are normative).
 
 **Existing code anchors (read before extending):**
 - `packages/query/src/ast.ts`: `Expr` union, `NodePattern { variable?, labels, props: {property,value}[], pos }`, `EdgePattern { variable?, types, direction, varLength?, pos }`, `PathPattern { nodes, edges }`, `ReadQuery`, `ParsedQuery { explain, query }`, `walkExpr`.
@@ -53,7 +51,7 @@ Conventions: ESM `.js` import extensions; commits end with a blank line then `Co
 - Modify: `packages/query/src/lexer.ts`, `packages/query/src/ast.ts`
 - Test: `packages/query/test/lexer-write.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/query/test/lexer-write.test.ts`:
 
@@ -97,12 +95,12 @@ describe('lexer — write keywords', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm vitest run packages/query/test/lexer-write.test.ts`
 Expected: FAIL — new words lex as `ident`, not `keyword`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `packages/query/src/lexer.ts`, extend the `KEYWORDS` set with the new words (append to the existing literal set):
 
@@ -182,12 +180,12 @@ export interface ParsedQuery {
 
 This **changes** the shape of `ParsedQuery` (was `{ explain, query }`). M4a code reads `parsed.query`/`parsed.explain`; Task 2 updates the parser to return `{ explain, statement }`, and Task 8 updates `api.ts`. Until then build is red — that's expected mid-task and resolved within this plan; do not attempt to keep both shapes.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/lexer-write.test.ts`
 Expected: PASS (the lexer test does not depend on the AST change). Do NOT run the full build yet — the `ParsedQuery` change makes it red until Task 2.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -200,7 +198,7 @@ git commit -m "feat(query): lex write keywords; statement-level AST types"
 - Modify: `packages/query/src/parser.ts`
 - Test: `packages/query/test/parser-write.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/parser-write.test.ts`:
 
@@ -312,12 +310,12 @@ describe('parseQuery — write validation', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/parser-write.test.ts`
 Expected: FAIL — `parsed.statement` undefined / write clauses unparsed.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `packages/query/src/parser.ts`, rewrite `parseQuery` to dispatch and add the write grammar. Replace the existing `parseQuery` function with:
 
@@ -614,12 +612,12 @@ function introduceCreatePattern(
 
 Note: `checkExprRefs` is the existing reference checker used inside `validateQuery` — extract it (if it is currently a closure named `checkRefs` inside `validateQuery`) into a module-level `function checkExprRefs(e, known, source, allowAlias, aliases?)` so both validators share it. Keep `validateQuery`'s behavior identical.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/parser-write.test.ts packages/query/test/parser.test.ts packages/query/test/expr-parser.test.ts`
 Expected: PASS — write parsing works AND the M4a parser/expr suites still pass through the refactor. (Build remains red until Task 8 fixes `api.ts`; that's fine — tests import modules directly.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -635,7 +633,7 @@ The write executor runs inside a `db.transact` callback driving a `TxBuilder`. I
 - Modify: `packages/query/src/exec.ts` (export a reusable `matchBindings` helper)
 - Test: `packages/query/test/write-exec.test.ts`
 
-- [ ] **Step 1: Export the binding helper from exec.ts**
+- [x] **Step 1: Export the binding helper from exec.ts**
 
 In `packages/query/src/exec.ts`, the binding generators currently live inside `runRead`. Extract the binding-subtree walk into an exported function so writes can reuse it. Add (near the top-level exports):
 
@@ -674,7 +672,7 @@ This requires refactoring `runRead` so its internal `bindings(node)` generator a
 
 `Binding`, `ExecOptions`, `Guard`, `EvalContext` are already in this module; export `matchBindings` and the `Binding` type if not already exported.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/query/test/write-exec.test.ts`:
 
@@ -789,12 +787,12 @@ describe('RETURN after write', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/write-exec.test.ts`
 Expected: FAIL — `write.js` not found.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/query/src/write.ts`:
 
@@ -965,12 +963,12 @@ Note: the `baseBinding.__final` stash is a hack — replace it with a clean para
 
 Add `TxBuilder` to `@atlas/core`'s exports if not already exported (it is — `export { TxBuilder }` exists in core's index).
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/write-exec.test.ts && pnpm vitest run packages/query/test/exec-basic.test.ts packages/query/test/exec-patterns.test.ts packages/query/test/exec-aggregate.test.ts`
 Expected: PASS — writes work AND the M4a exec suites survive the `collectBindings` refactor.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -985,7 +983,7 @@ Spec §5.2 MERGE: match the **whole pattern**; if no complete match exists, crea
 - Modify: `packages/query/src/write.ts`
 - Test: `packages/query/test/merge-exec.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/merge-exec.test.ts`:
 
@@ -1080,12 +1078,12 @@ describe('MERGE — constraint interaction', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/merge-exec.test.ts`
 Expected: FAIL — MERGE throws "handled in Task 4".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `packages/query/src/write.ts`, replace the `merge` case in `runClause` with a real implementation. MERGE matches the whole pattern against committed state **plus** elements created earlier in this same transaction (via the store — but tx-created nodes are not yet in the store until commit). For v1 correctness with atomicity, MERGE matches against the **committed store only** for the match attempt; this is consistent because each MERGE runs in its own logical step and the spec's match-or-create is defined over current graph state. Document this.
 
@@ -1148,12 +1146,12 @@ Replace the `case 'merge':` body in `runClause` with `runMerge(clause, ctx, bind
 
 Caveat to document in code: `matchBindings` matches against the live store, which does not yet include nodes created earlier in the same uncommitted transaction. Within a single MERGE per row this is correct; chained MERGEs in one statement that depend on each other's just-created nodes are a known v1 limitation (note it in the AQL reference, Task 9).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/merge-exec.test.ts packages/query/test/write-exec.test.ts`
 Expected: PASS — including the whole-pattern create (a new Ada) and the constraint violation.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1166,7 +1164,7 @@ git commit -m "feat(query): MERGE with whole-pattern match-or-create and ON CREA
 - Modify: `packages/query/src/parser.ts` (implement `tryParseDdl`), create `packages/query/src/ddl.ts`
 - Test: `packages/query/test/ddl.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/ddl.test.ts`:
 
@@ -1257,12 +1255,12 @@ describe('DDL execution', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/ddl.test.ts`
 Expected: FAIL — `tryParseDdl` returns null; `ddl.js` missing.
 
-- [ ] **Step 3: Implement the parser side**
+- [x] **Step 3: Implement the parser side**
 
 In `packages/query/src/parser.ts`, replace the `tryParseDdl` stub. It must NOT consume tokens unless it is certain the statement is DDL (CREATE может be a write), so peek before committing:
 
@@ -1304,7 +1302,7 @@ function tryParseDdl(ts: TokenStream): DdlStatement | null {
 }
 ```
 
-- [ ] **Step 4: Implement the executor**
+- [x] **Step 4: Implement the executor**
 
 `packages/query/src/ddl.ts`:
 
@@ -1347,12 +1345,12 @@ export async function runDdl(stmt: DdlStatement, db: AtlasDatabase): Promise<Ddl
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/ddl.test.ts packages/query/test/parser-write.test.ts`
 Expected: PASS — DDL parses/executes and CREATE(node) still routes to writes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1365,7 +1363,7 @@ git commit -m "feat(query): schema DDL parsing and execution (CREATE/DROP/SHOW)"
 - Modify: `packages/query/src/parser.ts` (implement `parseCall`), create `packages/query/src/call.ts`
 - Test: `packages/query/test/call.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/call.test.ts`:
 
@@ -1451,12 +1449,12 @@ describe('CALL execution maps onto db.algo', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/call.test.ts`
 Expected: FAIL — `parseCall` throws "not yet implemented"; `call.js` missing.
 
-- [ ] **Step 3: Implement the parser side**
+- [x] **Step 3: Implement the parser side**
 
 In `packages/query/src/parser.ts`, replace the `parseCall` stub:
 
@@ -1509,7 +1507,7 @@ function parseCallArg(ts: TokenStream): Expr {
 }
 ```
 
-- [ ] **Step 4: Implement the executor**
+- [x] **Step 4: Implement the executor**
 
 `packages/query/src/call.ts`:
 
@@ -1628,12 +1626,12 @@ function inferColumns(results: Record<string, RuntimeValue>[]): { name: string }
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/query/test/call.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1646,7 +1644,7 @@ git commit -m "feat(query): CALL algo.* mapping onto db.algo with YIELD projecti
 - Modify: `packages/query/src/api.ts`, `packages/query/src/plan.ts`
 - Test: `packages/query/test/api-write.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/query/test/api-write.test.ts`:
 
@@ -1724,12 +1722,12 @@ describe('executeQuery routes every statement type', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/api-write.test.ts`
 Expected: FAIL — `api.ts` still reads `parsed.query` (old shape) and has no write/ddl/call routing.
 
-- [ ] **Step 3: Implement EXPLAIN serialization for write/ddl/call**
+- [x] **Step 3: Implement EXPLAIN serialization for write/ddl/call**
 
 In `packages/query/src/plan.ts`, add lightweight plan-description builders (no executor coupling — these are display-only for EXPLAIN):
 
@@ -1759,7 +1757,7 @@ export function describeCallPlan(s: CallStatement): Record<string, unknown> {
 }
 ```
 
-- [ ] **Step 4: Rewrite `executeQuery` to route**
+- [x] **Step 4: Rewrite `executeQuery` to route**
 
 Replace `packages/query/src/api.ts`'s `executeQuery` and `explainQuery`:
 
@@ -1851,12 +1849,12 @@ export function explainQuery(db: AtlasDatabase, text: string): Record<string, un
 }
 ```
 
-- [ ] **Step 5: Run tests + full gate to verify the build is green again**
+- [x] **Step 5: Run tests + full gate to verify the build is green again**
 
 Run: `pnpm vitest run packages/query/test/api-write.test.ts packages/query/test/api.test.ts && pnpm build && pnpm typecheck:test && pnpm lint && pnpm format`
 Expected: PASS and green — `api.ts` now consumes the new `parsed.statement` shape, restoring the build that was red since Task 1.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1869,7 +1867,7 @@ git commit -m "feat(query): route read/write/DDL/CALL through executeQuery with 
 - Modify: `packages/query/src/index.ts`, `README.md`
 - Create: `docs/aql-reference.md`, `packages/query/test/e2e.test.ts`
 
-- [ ] **Step 1: Write the end-to-end test**
+- [x] **Step 1: Write the end-to-end test**
 
 `packages/query/test/e2e.test.ts`:
 
@@ -1939,12 +1937,12 @@ describe('AQL end-to-end on science-history', () => {
 
 Note: if the `WITH`-strip hack reads awkwardly, just write the query plainly as `MATCH (p:Person)-[:WROTE]->(d:Document) RETURN p.name AS name, count(d) AS works` — `WITH` is not in scope for M4, the `.replace` is only there to make that explicit; the implementer should use the plain query and delete the comment.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/query/test/e2e.test.ts`
 Expected: FAIL — likely on imports until exports are finalized; fix and iterate.
 
-- [ ] **Step 3: Finalize exports**
+- [x] **Step 3: Finalize exports**
 
 In `packages/query/src/index.ts`, add the M4b public surface (append to the existing exports):
 
@@ -1968,7 +1966,7 @@ export type {
 } from './ast.js';
 ```
 
-- [ ] **Step 4: Write the AQL reference doc**
+- [x] **Step 4: Write the AQL reference doc**
 
 `docs/aql-reference.md`:
 
@@ -2058,7 +2056,7 @@ Parse, semantic, and runtime errors are `AqlError` with `code`, `message`,
 (per-query budget) and `ROW_LIMIT` (max rows) rather than truncating.
 ```
 
-- [ ] **Step 5: Update README + run the full gate**
+- [x] **Step 5: Update README + run the full gate**
 
 In `README.md`, set the `**Status:**` block to:
 
@@ -2072,7 +2070,7 @@ schema DDL, and `CALL algo.*`, all atomic and EXPLAIN-able. See
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green across all four packages.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

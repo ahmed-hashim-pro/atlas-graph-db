@@ -1,14 +1,12 @@
 # Atlas M6b — Knowledge Graph Explorer: Workspace Graph Canvas
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Replace the M6a placeholder `/db/:name` route with the real **Workspace** — a graph canvas as the hero (spec §7.2/§7.3). Ship a framework-agnostic, signal-friendly graph view-model store; a deterministic d3-force layout that runs in a Web Worker but is unit-tested as a plain function; a Canvas2D renderer core that reads colors from the active theme tokens; pure zoom/pan viewport math and pure point→node hit-testing; an Angular canvas component that wires the renderer + worker + viewport to pointer events (zoom/pan, click-select, drag-to-pin, double-click expand, right-click context menu); double-click expand-neighbors through `Database.query` (capped + paged); a right inspector (read-only properties + connection list + expand/paths actions) and a left label/edge-type legend with color swatches + visibility toggles + counts; live updates from `Database.subscribe`; and a Playwright e2e that seeds a db, opens the workspace, asserts the canvas renders, selects a node, and toggles a label. The renderer, simulation, hit-testing and viewport stay PLAIN TS (maximally Vitest-testable); the Angular component and the Worker are thin wrappers.
 
 **Architecture:** The hero workspace is composed of plain-TS cores wrapped by thin Angular shells, matching the chosen "logic-heavy + e2e smoke" testing strategy. (1) A signal-based `GraphStore` (Angular `@Injectable`, but its merge/cap/visibility/selection logic is pure and unit-tested) holds the visible node/edge set as `GraphNode`/`GraphEdge`, the selection, per-label and per-edge-type visibility toggles with counts (seeded from `Database.schema()`, refined from query results), and a configurable render cap producing a "showing N of M" indicator. (2) `simulation.ts` is a plain function over `SimGraph` → positions using d3-force with a **seeded** deterministic RNG, so ticks converge identically every run; `layout.worker.ts` is a ~40-line wrapper that forwards a typed message protocol (`init`/`tick`/`pin`/`unpin`/`stop`) to the same core. (3) `renderer.ts` exports `drawGraph(ctx, scene)` taking nodes-with-positions + edges + a `ViewportTransform` + a resolved `RenderTheme` (node/accent/text/edge colors) and issues Canvas2D draw calls; `hitTest.ts` is pure `point→nodeId|null`. (4) `viewport.ts` holds pure `screenToWorld`/`worldToScreen`/`zoomAt`/`panBy` math. (5) `GraphCanvas` (Angular) owns the `<canvas>`, resolves `RenderTheme` from the active theme's CSS custom properties via `getComputedStyle`, drives a `requestAnimationFrame` loop, spawns the worker, and translates pointer/wheel/contextmenu events into store + viewport mutations. (6) Expand-neighbors issues a parameterized AQL query (cap + skip) through `AtlasApi.database(name)`. (7) The `Inspector` and `Legend` are signal-bound presentational components. (8) Live updates subscribe to the change feed and merge frames into the store; the e2e drives a real seeded database served by `@atlas/server`.
 
 **Tech Stack:** Existing M6a stack — Angular 20.3 (standalone, signals, zoneless, Router), the `@angular/build:unit-test` Vitest runner with jsdom, `@atlas/client` (cookie mode), `AtlasApi`/`AuthService`/`ThemeService`, three CSS-token themes, Playwright e2e — plus `d3-force ^3.0.0` (+ `@types/d3-force`) for the layout simulation and the browser `Worker` API (`new Worker(new URL('./layout.worker', import.meta.url), { type: 'module' })`, which the Angular `@angular/build:application` builder bundles). The AQL console + visual EXPLAIN + schema view + algorithms view (M6c) and admin + import UI + ⌘K node search + inspector editing + paths-finding UI (M6d) are **out of scope here.**
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §7.2 (Workspace: top bar, left rail with the label/edge-type legend + visibility toggles + counts, center graph canvas, right inspector with selected node/edge properties + connection list + expand/paths actions), §7.3 (custom plain-TS Canvas2D renderer wrapped in an Angular component; d3-force simulation in a Web Worker streaming positions; interactions: zoom/pan, click select, double-click expand neighbors capped+paged, right-click context menu, drag to pin; graceful degradation to a configurable max-rendered-nodes cap with a "showing N of M" indicator), §7.4 (the renderer reads colors from the active token set), §7.5 (keyboard nav + visible focus + ARIA on non-canvas controls; canvas interactions mirrored by an accessible node list — the inspector's connection list + the results node list serve as the v1 mirror).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §7.2 (Workspace: top bar, left rail with the label/edge-type legend + visibility toggles + counts, center graph canvas, right inspector with selected node/edge properties + connection list + expand/paths actions), §7.3 (custom plain-TS Canvas2D renderer wrapped in an Angular component; d3-force simulation in a Web Worker streaming positions; interactions: zoom/pan, click select, double-click expand neighbors capped+paged, right-click context menu, drag to pin; graceful degradation to a configurable max-rendered-nodes cap with a "showing N of M" indicator), §7.4 (the renderer reads colors from the active token set), §7.5 (keyboard nav + visible focus + ARIA on non-canvas controls; canvas interactions mirrored by an accessible node list — the inspector's connection list + the results node list serve as the v1 mirror).
 
 **Existing code anchors (from M5a + M6a — verified):**
 - `@atlas/client` (`packages/client/src/index.ts`): `connect(url, { mode: 'cookie' }) → AtlasClient`; `AtlasClient.database(name) → Database`; `Database.query(aql, params) → Promise<QueryResponse>`; `Database.schema() → Promise<SchemaSummary>`; `Database.subscribe(filter, onFrame) → Promise<Subscription>` where `Subscription { close(): void }`. `AtlasClientError { code, status, message, problem? }`.
@@ -70,7 +68,7 @@ The store is the single source of truth for what the canvas shows: the visible n
 - Create: `apps/web/src/app/workspace/graph-model.ts`, `apps/web/src/app/workspace/graph.store.ts`
 - Test: `apps/web/src/app/workspace/graph-model.spec.ts`, `apps/web/src/app/workspace/graph.store.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/workspace/graph-model.spec.ts`:
 
@@ -252,12 +250,12 @@ describe('GraphStore', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./graph-model` and `./graph.store` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/graph-model.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/graph-model.ts`**
 
 ```ts
 /** A renderable node. `x`/`y` are filled in by the layout simulation; `pinned` fixes a node. */
@@ -366,7 +364,7 @@ export function applyVisibility(data: GraphData, vis: VisibilityState): GraphDat
 }
 ```
 
-- [ ] **Step 4: Implement `apps/web/src/app/workspace/graph.store.ts`**
+- [x] **Step 4: Implement `apps/web/src/app/workspace/graph.store.ts`**
 
 ```ts
 import { computed, Injectable, signal } from '@angular/core';
@@ -535,12 +533,12 @@ export class GraphStore {
 
 Note: `GraphStore` is `@Injectable()` **without** `providedIn: 'root'` — it is provided per-`Workspace` instance (Task 7) so each open database gets a fresh store. `ingestSchema` seeds the legend before any data arrives (so the rail shows the full schema with counts); `refreshLegendFromData` then keeps counts in sync with what is actually loaded, preserving each entry's visibility toggle.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — model merge/cap/visibility and store schema/add/toggle/cap/selection/connections/remove.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -560,7 +558,7 @@ The simulation is a plain function tested directly in Vitest (no real Worker in 
 - Modify: `apps/web/package.json` (add `d3-force` + `@types/d3-force`)
 - Test: `apps/web/src/app/workspace/simulation.spec.ts`
 
-- [ ] **Step 1: Add d3-force**
+- [x] **Step 1: Add d3-force**
 
 ```bash
 pnpm -F web add d3-force@^3.0.0
@@ -568,7 +566,7 @@ pnpm -F web add -D @types/d3-force@^3.0.10
 pnpm install
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `apps/web/src/app/workspace/simulation.spec.ts`:
 
@@ -638,12 +636,12 @@ describe('runSimulation (plain, seeded)', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./simulation` not found.
 
-- [ ] **Step 4: Implement `apps/web/src/app/workspace/simulation.ts`**
+- [x] **Step 4: Implement `apps/web/src/app/workspace/simulation.ts`**
 
 ```ts
 import {
@@ -745,7 +743,7 @@ export function createSimulation(graph: SimGraph, opts: SimOptions = {}): Runnin
 }
 ```
 
-- [ ] **Step 5: Implement the thin Worker wrapper `apps/web/src/app/workspace/layout.worker.ts`**
+- [x] **Step 5: Implement the thin Worker wrapper `apps/web/src/app/workspace/layout.worker.ts`**
 
 ```ts
 /// <reference lib="webworker" />
@@ -794,12 +792,12 @@ addEventListener('message', (ev: MessageEvent<LayoutInbound>) => {
 
 The Worker file is intentionally untested in isolation (jsdom has no real `Worker`); its only logic — `createSimulation` and the message switch — is covered by `simulation.spec.ts` and (via a mock worker) by the component test in Task 5. The `LayoutInbound`/`LayoutOutbound` types are the contract the component speaks.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — finite positions, determinism for a fixed seed, spread, pinned-node fixing, streaming tick/stop.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -818,7 +816,7 @@ Zoom/pan is pure screen↔world arithmetic; point→node hit-testing is pure geo
 - Create: `apps/web/src/app/workspace/viewport.ts`, `apps/web/src/app/workspace/hit-test.ts`
 - Test: `apps/web/src/app/workspace/viewport.spec.ts`, `apps/web/src/app/workspace/hit-test.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/workspace/viewport.spec.ts`:
 
@@ -927,12 +925,12 @@ describe('hitTest', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./viewport` and `./hit-test` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/viewport.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/viewport.ts`**
 
 ```ts
 import type { GraphNode, ViewportTransform } from './graph-model';
@@ -991,7 +989,7 @@ export function fitToNodes(
 }
 ```
 
-- [ ] **Step 4: Implement `apps/web/src/app/workspace/hit-test.ts`**
+- [x] **Step 4: Implement `apps/web/src/app/workspace/hit-test.ts`**
 
 ```ts
 import type { GraphNode, ViewportTransform } from './graph-model';
@@ -1019,12 +1017,12 @@ export function hitTest(
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — inverse transforms, anchored zoom + clamp, fit, and hit-testing under transform/overlap.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1043,7 +1041,7 @@ End the body with a blank line then `Co-Authored-By: Claude Fable 5 <noreply@ant
 - Create: `apps/web/src/app/workspace/renderer.ts`, `apps/web/src/app/workspace/theme-colors.ts`
 - Test: `apps/web/src/app/workspace/renderer.spec.ts`, `apps/web/src/app/workspace/theme-colors.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/workspace/theme-colors.spec.ts`:
 
@@ -1214,12 +1212,12 @@ describe('drawGraph', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./renderer` and `./theme-colors` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/theme-colors.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/theme-colors.ts`**
 
 ```ts
 import type { RenderTheme } from './graph-model';
@@ -1278,7 +1276,7 @@ export function makeColorOf(palette: string[]): (labels: string[]) => string {
 }
 ```
 
-- [ ] **Step 4: Implement `apps/web/src/app/workspace/renderer.ts`**
+- [x] **Step 4: Implement `apps/web/src/app/workspace/renderer.ts`**
 
 ```ts
 import { NODE_RADIUS, type Scene } from './graph-model';
@@ -1343,12 +1341,12 @@ export function drawGraph(ctx: CanvasRenderingContext2D, scene: Scene): void {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — clear+edges+nodes counts, per-label palette fills, selection accent stroke, label text, positionless-node skip, and theme resolution + stable `colorOf`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -1367,7 +1365,7 @@ The component owns the `<canvas>`, resolves `RenderTheme` from the host's comput
 - Create: `apps/web/src/app/workspace/graph-canvas.ts`, `apps/web/src/app/workspace/graph-canvas.html`
 - Test: `apps/web/src/app/workspace/graph-canvas.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/workspace/graph-canvas.spec.ts`:
 
@@ -1452,12 +1450,12 @@ describe('GraphCanvas component', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./graph-canvas` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/graph-canvas.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/graph-canvas.ts`**
 
 ```ts
 import {
@@ -1723,12 +1721,12 @@ and delete `computeFit`. (The top import becomes `import { fitToNodes, IDENTITY,
 </div>
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — canvas renders; click-select / empty-clear; wheel-zoom; dbl-click expand emit; right-click menu; drag-pin posts a `pin` message and pins via the store. (The component uses `testWorkerPost` to avoid a real `Worker` and `getContext('2d')` is stubbed by jsdom's canvas; if jsdom returns `null` for `getContext`, `render()` early-returns and the selection/zoom assertions still hold.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1747,7 +1745,7 @@ Double-click (or the context menu) expands a node's neighbors through a paramete
 - Create: `apps/web/src/app/workspace/expand.ts`
 - Test: `apps/web/src/app/workspace/expand.spec.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/web/src/app/workspace/expand.spec.ts`:
 
@@ -1817,12 +1815,12 @@ describe('parseGraphRows', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./expand` not found.
 
-- [ ] **Step 3: Implement `apps/web/src/app/workspace/expand.ts`**
+- [x] **Step 3: Implement `apps/web/src/app/workspace/expand.ts`**
 
 ```ts
 import type { QueryResponse } from '@atlas/protocol';
@@ -1890,12 +1888,12 @@ export function parseGraphRows(res: QueryResponse): GraphData {
 
 Note: `parseGraphRows` checks `isRawEdge` before `isRawNode` because an edge value also carries `id`/`properties`; the edge discriminator (`type` + `from` + `to`) is more specific. The `mergeGraph` in `GraphStore.addGraph` then drops any edge whose endpoints are not present — so a neighbor page that returns an edge to an as-yet-unloaded node is held back until that node arrives. Edge ids from the engine are assumed distinct from node ids; if the engine reuses an id space, `parseGraphRows` still keys nodes and edges in separate maps, so there is no collision in `GraphData`.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — query string + params, dedup parse, null-cell tolerance, scalar-row tolerance.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1916,7 +1914,7 @@ The left rail hosts the label/edge-type legend (color swatches + visibility togg
 - Delete: `apps/web/src/app/workspace/workspace-placeholder.ts`
 - Test: `apps/web/src/app/workspace/inspector.spec.ts`, `legend.spec.ts`, `workspace.spec.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/web/src/app/workspace/legend.spec.ts`:
 
@@ -2117,12 +2115,12 @@ describe('Workspace page', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: FAIL — `./legend`, `./inspector`, `./workspace` not found.
 
-- [ ] **Step 3: Implement the legend**
+- [x] **Step 3: Implement the legend**
 
 `apps/web/src/app/workspace/legend.ts`:
 
@@ -2197,7 +2195,7 @@ export class Legend {
 </nav>
 ```
 
-- [ ] **Step 4: Implement the inspector**
+- [x] **Step 4: Implement the inspector**
 
 `apps/web/src/app/workspace/inspector.ts`:
 
@@ -2276,7 +2274,7 @@ export class Inspector {
 </aside>
 ```
 
-- [ ] **Step 5: Implement the Workspace page**
+- [x] **Step 5: Implement the Workspace page**
 
 `apps/web/src/app/workspace/workspace.ts`:
 
@@ -2392,7 +2390,7 @@ Note on `WsFrame`: the change-feed frame shape is owned by `@atlas/protocol`. Th
 </div>
 ```
 
-- [ ] **Step 6: Replace the route and delete the placeholder**
+- [x] **Step 6: Replace the route and delete the placeholder**
 
 In `apps/web/src/app/app.routes.ts`, change the `db/:name` entry to load `Workspace` and delete `workspace-placeholder.ts`:
 
@@ -2408,7 +2406,7 @@ In `apps/web/src/app/app.routes.ts`, change the `db/:name` entry to load `Worksp
 git rm apps/web/src/app/workspace/workspace-placeholder.ts
 ```
 
-- [ ] **Step 7: Append workspace layout to `apps/web/src/styles.css`**
+- [x] **Step 7: Append workspace layout to `apps/web/src/styles.css`**
 
 ```css
 .workspace {
@@ -2582,12 +2580,12 @@ git rm apps/web/src/app/workspace/workspace-placeholder.ts
 }
 ```
 
-- [ ] **Step 8: Run the tests to verify they pass**
+- [x] **Step 8: Run the tests to verify they pass**
 
 Run: `pnpm -F web exec ng test --watch=false`
 Expected: PASS — legend lists/toggles, inspector read-only props + connections + expand emit + neighbor-select, and Workspace initial load + expand fold-in.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A
@@ -2607,15 +2605,15 @@ Live updates are already wired in the Workspace (`subscribe` → `onFrame` → s
 - Modify: `README.md`
 - Test: `apps/web/e2e/workspace.spec.ts`
 
-- [ ] **Step 1: Confirm the live-updates wiring (no new code)**
+- [x] **Step 1: Confirm the live-updates wiring (no new code)**
 
 The Workspace subscribes on `ngAfterViewInit` via `AtlasApi.database(name).subscribe({}, onFrame)` and merges each frame into the store, then calls `canvas.resyncLayout()` so new nodes/edges flow into the simulation. `workspace.spec.ts` (Task 7) already mocks `subscribe` returning a closable `Subscription`; confirm `ngOnDestroy` calls `this.sub?.close()` so the socket is released when navigating away. No new unit test is required here — the e2e in Step 3 covers a live write reflecting on the canvas indirectly (the seed itself is the write path the canvas reads back).
 
-- [ ] **Step 2: Reuse the M6a Playwright config**
+- [x] **Step 2: Reuse the M6a Playwright config**
 
 The M6a `apps/web/playwright.config.ts` already builds the SPA and serves it from `@atlas/server` static hosting on a fixed port with a temp data dir (same-origin cookies). No config change is needed; the new spec lives alongside `explorer.spec.ts` under `apps/web/e2e/`.
 
-- [ ] **Step 3: Write the e2e smoke**
+- [x] **Step 3: Write the e2e smoke**
 
 `apps/web/e2e/workspace.spec.ts`:
 
@@ -2664,12 +2662,12 @@ test('open the workspace, render the seeded graph, select a node, toggle a label
 });
 ```
 
-- [ ] **Step 4: Run the e2e to verify it passes**
+- [x] **Step 4: Run the e2e to verify it passes**
 
 Run: `pnpm -F web e2e`
 Expected: PASS — the webServer builds the SPA, starts `@atlas/server` serving it, registers, seeds science-history, opens the workspace, asserts the canvas + legend render, exercises a click, and toggles the Person label. If a selector mismatches (e.g. the legend `aria-label`), align the spec to the actual ARIA names from Task 5/7 — do not weaken the canvas-renders or label-toggle assertions. If the seed graph exceeds the render cap, the `.ws-stats` "N / M" still asserts a non-empty, capped scene.
 
-- [ ] **Step 5: Update the README**
+- [x] **Step 5: Update the README**
 
 In `README.md`, set the `**Status:**` block to:
 
@@ -2688,12 +2686,12 @@ schema view, and algorithms view land in M6c; admin, import UI, ⌘K search, and
 inspector editing land in M6d.
 ```
 
-- [ ] **Step 6: Run the full gate**
+- [x] **Step 6: Run the full gate**
 
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green — `tsc -b` builds the libraries (ignoring `apps/web`), the Angular builder builds the app (bundling `layout.worker.ts` via the `new Worker(new URL(...))` form), the library Vitest suite passes, and the app's `ng test` suite passes (graph-model, store, simulation, viewport, hit-test, renderer, theme-colors, expand, graph-canvas, legend, inspector, workspace). The Playwright e2e is intentionally excluded from `pnpm test` (run via `pnpm e2e:web`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A

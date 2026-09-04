@@ -1,14 +1,12 @@
 # Atlas M5b — Server Completion Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Finish the Atlas server: node/edge CRUD REST, import/export + dataset seeding, WebSocket change-feed subscriptions, Prometheus metrics, safety rails (rate-limit, CORS, security headers), static SPA hosting, the isomorphic `@atlas/client` SDK, and the Docker deployment entrypoint.
 
 **Architecture:** New routes extend the existing `registerXRoutes(app, ctx)` pattern, all guarded by `requireAuth`/`requireCapability`. WebSocket subscriptions wrap the engine's `db.subscribe(handler, {fromTxId})` change feed (`@fastify/websocket`), filtering batches by label/type and forwarding the `resync_required` close protocol. A hand-rolled `MetricsRegistry` records query latency and connection counts, exposed in Prometheus text format. Rate-limiting and security headers are small Fastify hooks (no extra deps); CORS and static hosting use official plugins. `@atlas/client` is a zero-dependency isomorphic package over global `fetch` + `WebSocket`.
 
 **Tech Stack:** Existing stack + `@fastify/websocket@^11`, `@fastify/cors@^10`, `@fastify/static@^8` (all verified to resolve). No HTTP client dep — Node 22+ and browsers both provide global `fetch`/`WebSocket`. Tests use Fastify `.inject()` for HTTP; WebSocket tests use `app.listen({port:0})` on an ephemeral port with the global `WebSocket` client, torn down in `afterEach`.
 
-**Spec:** `docs/superpowers/specs/2026-06-10-atlas-graph-platform-design.md` §6.4 (endpoint table — M5b does data CRUD, import/export, seed, WS, metrics), §6.4 import format (normative JSON tempId mapping, 10k batches, `atomic` flag, CSV typed headers), §6.5 (rate-limit, CORS, security headers, metrics), §6.6 (client SDK shape).
+**Spec:** `docs/design/specs/2026-06-10-atlas-graph-platform-design.md` §6.4 (endpoint table — M5b does data CRUD, import/export, seed, WS, metrics), §6.4 import format (normative JSON tempId mapping, 10k batches, `atomic` flag, CSV typed headers), §6.5 (rate-limit, CORS, security headers, metrics), §6.6 (client SDK shape).
 
 **Existing code anchors:**
 - `@atlas/server`: `buildServer(config) → FastifyInstance`; `AppContext { catalog, manager, config }`; `requireAuth(catalog)` preHandler, `requireCapability(catalog, principal, dbName, cap)` with caps `read|write|ddl|admin-db|delete-db`; `routes/{auth,databases,query,tokens}.ts` each `registerXRoutes(app, ctx)`; `toProblem`/`HttpError`; `DatabaseManager.get(name) → Promise<AtlasDatabase>`; `app.ts` registers routes + onClose drain.
@@ -60,7 +58,7 @@ Conventions: ESM `.js` imports; commits end with a blank line then `Co-Authored-
 - Modify: `packages/server/src/app.ts`
 - Test: `packages/server/test/data-routes.test.ts`
 
-- [ ] **Step 1: Add wire schemas**
+- [x] **Step 1: Add wire schemas**
 
 Append to `packages/protocol/src/wire.ts`:
 
@@ -92,7 +90,7 @@ export const EdgePatchReq = NodePatchReq;
 export type EdgePatchReq = z.infer<typeof EdgePatchReq>;
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/server/test/data-routes.test.ts`:
 
@@ -206,12 +204,12 @@ describe('edge CRUD', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm install && pnpm vitest run packages/server/test/data-routes.test.ts`
 Expected: FAIL — data routes not registered.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/server/src/routes/data.ts`:
 
@@ -317,12 +315,12 @@ export async function registerDataRoutes(app: FastifyInstance, ctx: AppContext):
 
 In `packages/server/src/app.ts`, import and register: add `import { registerDataRoutes } from './routes/data.js';` and `await registerDataRoutes(app, ctx);` alongside the other route registrations.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/data-routes.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -335,7 +333,7 @@ git commit -m "feat(server): node and edge CRUD REST routes"
 - Create: `packages/server/src/csv.ts`
 - Test: `packages/server/test/csv.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/csv.test.ts`:
 
@@ -388,12 +386,12 @@ describe('parseEdgesCsv', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/csv.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/server/src/csv.ts`:
 
@@ -539,12 +537,12 @@ export function parseEdgesCsv(text: string): ImportEdge[] {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/csv.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -559,7 +557,7 @@ git commit -m "feat(server): CSV parsing with typed headers for import"
 - Modify: `packages/server/src/app.ts`
 - Test: `packages/server/test/io-routes.test.ts`
 
-- [ ] **Step 1: Add wire schemas**
+- [x] **Step 1: Add wire schemas**
 
 Append to `packages/protocol/src/wire.ts`:
 
@@ -589,7 +587,7 @@ export interface ImportResult {
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/server/test/io-routes.test.ts`:
 
@@ -718,12 +716,12 @@ describe('permissions', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/io-routes.test.ts`
 Expected: FAIL — io routes not registered.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 `packages/server/src/routes/io.ts`:
 
@@ -866,12 +864,12 @@ export async function registerIoRoutes(app: FastifyInstance, ctx: AppContext): P
 
 In `app.ts`, register `registerIoRoutes`.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/io-routes.test.ts`
 Expected: PASS — JSON + CSV import, export, seed, atomic rollback, permissions.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
@@ -886,7 +884,7 @@ git commit -m "feat(server): JSON/CSV import, export, and dataset seed routes"
 - Modify: `packages/server/src/app.ts`
 - Test: `packages/server/test/ws.test.ts`
 
-- [ ] **Step 1: Add the filter schema**
+- [x] **Step 1: Add the filter schema**
 
 Append to `packages/protocol/src/wire.ts`:
 
@@ -905,7 +903,7 @@ export type WsFrame =
   | { type: 'error'; code: string; message: string };
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/server/test/ws.test.ts`:
 
@@ -1012,12 +1010,12 @@ describe('WS subscriptions', () => {
 });
 ```
 
-- [ ] **Step 2b: Run tests to verify they fail**
+- [x] **Step 2b: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/ws.test.ts`
 Expected: FAIL — WS route not registered (connection rejected for all).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/server/src/routes/ws.ts`:
 
@@ -1096,12 +1094,12 @@ await app.register(fastifyWebsocket);
 
 and after the other route registrations `await registerWsRoutes(app, ctx);`. `ctx.metrics` is added in Task 5 — for this task, add a minimal `metrics` field to `AppContext` with a `wsSubscribers` counter object `{ inc(){}, dec(){} }` stub if Task 5 is not yet done; Task 5 replaces it with the real registry. (Order the implementation so Task 5's `MetricsRegistry` exists; if doing strictly in order, define the stub here and swap in Task 5.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/ws.test.ts`
 Expected: PASS — ready frame, batch streaming, label filtering, auth rejection. (These tests use a real ephemeral port; ensure `app.close()` in afterEach tears the listener down.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1115,7 +1113,7 @@ git commit -m "feat(server): WebSocket change-feed subscriptions with label/type
 - Modify: `packages/server/src/app.ts`, `packages/server/src/routes/query.ts`
 - Test: `packages/server/test/metrics.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/metrics.test.ts`:
 
@@ -1179,12 +1177,12 @@ describe('/metrics endpoint', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/metrics.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/server/src/metrics.ts`:
 
@@ -1272,12 +1270,12 @@ export async function registerMetricsRoutes(app: FastifyInstance, ctx: AppContex
 
 In `app.ts`: add `metrics: MetricsRegistry` to `AppContext`, construct it in `buildServer` (`const metrics = new MetricsRegistry();` and include in `ctx`), register `registerMetricsRoutes`. In `routes/query.ts`, wrap the query handler body: increment `ctx.metrics.queriesTotal` and `ctx.metrics.queryLatencyMs.observe(result.stats.elapsedMs)` after `executeQuery` returns. Replace the Task-4 `wsSubscribers` stub with `ctx.metrics.wsSubscribers`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/metrics.test.ts packages/server/test/ws.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1291,7 +1289,7 @@ git commit -m "feat(server): Prometheus metrics registry and /metrics endpoint"
 - Modify: `packages/server/src/config.ts`, `packages/server/src/app.ts`
 - Test: `packages/server/test/security.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/server/test/security.test.ts`:
 
@@ -1355,12 +1353,12 @@ describe('rate limiting', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm vitest run packages/server/test/security.test.ts`
 Expected: FAIL — headers/CORS/limit not present.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `packages/server/src/config.ts`, add to `ServerConfig` and `loadConfig`:
 
@@ -1429,12 +1427,12 @@ In `app.ts`:
 
 Order: register CORS and security headers and rate-limit before routes.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/server/test/security.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
@@ -1448,7 +1446,7 @@ git commit -m "feat(server): security headers, CORS, per-principal rate limiting
 - Modify: `packages/server/src/app.ts`, root `tsconfig.json`, root `package.json`
 - Test: `packages/client/test/client.test.ts`, `packages/server/test/static.test.ts`
 
-- [ ] **Step 1: Write the package files**
+- [x] **Step 1: Write the package files**
 
 `packages/client/package.json`:
 
@@ -1477,7 +1475,7 @@ git commit -m "feat(server): security headers, CORS, per-principal rate limiting
 
 (`DOM` lib gives the ambient `fetch`/`WebSocket`/`URL` types used isomorphically.) `packages/client/test/tsconfig.json` same shape as other test tsconfigs but with `"lib": ["ES2023", "DOM"]` and `"types": ["node"]`. Root `tsconfig.json` references += `{ "path": "packages/client" }`; root `package.json` `typecheck:test` += ` && tsc -p packages/client/test/tsconfig.json`.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `packages/client/test/client.test.ts`:
 
@@ -1585,12 +1583,12 @@ describe('static SPA hosting', () => {
 });
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [x] **Step 3: Run tests to verify they fail**
 
 Run: `pnpm install && pnpm vitest run packages/client/test/client.test.ts packages/server/test/static.test.ts`
 Expected: FAIL — client module + static hosting missing.
 
-- [ ] **Step 4: Implement the client**
+- [x] **Step 4: Implement the client**
 
 `packages/client/src/index.ts`:
 
@@ -1674,7 +1672,7 @@ export function connect(url: string, opts: ConnectOptions = {}): AtlasClient {
 
 Ensure `@atlas/protocol` exports `QueryResponse`, `SubscribeFilter`, `WsFrame` (added in earlier tasks — confirm they're in `wire.ts`'s exports).
 
-- [ ] **Step 5: Implement static hosting in `app.ts`**
+- [x] **Step 5: Implement static hosting in `app.ts`**
 
 After all API/WS routes are registered, conditionally serve the SPA:
 
@@ -1694,12 +1692,12 @@ if (config.staticDir) {
 
 This replaces the plain not-found handler from M5a when a static dir is configured (keep the plain JSON 404 handler when no static dir). Structure `buildServer` so the not-found handler is set once, branching on `config.staticDir`.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `pnpm vitest run packages/client/test/client.test.ts packages/server/test/static.test.ts && pnpm build`
 Expected: PASS; whole solution builds with the new client package.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -1713,7 +1711,7 @@ git commit -m "feat(client): isomorphic @atlas/client SDK; static SPA hosting wi
 - Create: `docker-compose.yml`, `docs/api-reference.md`
 - Test: `packages/server/test/full-e2e.test.ts`
 
-- [ ] **Step 1: Write the capstone e2e test**
+- [x] **Step 1: Write the capstone e2e test**
 
 `packages/server/test/full-e2e.test.ts`:
 
@@ -1761,12 +1759,12 @@ describe('full server journey', () => {
 });
 ```
 
-- [ ] **Step 2: Run it (capstone over existing routes)**
+- [x] **Step 2: Run it (capstone over existing routes)**
 
 Run: `pnpm vitest run packages/server/test/full-e2e.test.ts`
 Expected: PASS if Tasks 1–7 are complete; otherwise fix the implicated route.
 
-- [ ] **Step 3: Server index exports + Docker**
+- [x] **Step 3: Server index exports + Docker**
 
 Append to `packages/server/src/index.ts`:
 
@@ -1825,7 +1823,7 @@ volumes:
   atlas-data:
 ```
 
-- [ ] **Step 4: Write the API reference doc**
+- [x] **Step 4: Write the API reference doc**
 
 `docs/api-reference.md`:
 
@@ -1881,7 +1879,7 @@ query errors).
 - `GET /healthz` → `{status:'ok'}` · `GET /metrics` → Prometheus text
 ```
 
-- [ ] **Step 5: README + full gate**
+- [x] **Step 5: README + full gate**
 
 In `README.md`, set `**Status:**` to:
 
@@ -1895,7 +1893,7 @@ static SPA hosting, Docker deploy. See `docs/api-reference.md`.
 Run: `pnpm build && pnpm typecheck:test && pnpm lint && pnpm format && pnpm test`
 Expected: all green across all seven packages.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
