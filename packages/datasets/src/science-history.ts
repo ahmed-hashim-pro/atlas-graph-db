@@ -40,7 +40,7 @@ const PEOPLE: [name: string, born: number, field: string][] = [
   ['Emmy Noether', 1882, 'mathematics'],
   ['Bernhard Riemann', 1826, 'mathematics'],
   ['George Boole', 1815, 'logic'],
-  ['Augusta De Morgan', 1806, 'logic'],
+  ['Augustus De Morgan', 1806, 'logic'],
   ['Lise Meitner', 1878, 'physics'],
 ];
 
@@ -76,7 +76,16 @@ const DOCUMENTS: [title: string, year: number, authorIdx: number][] = [
   ['Idealtheorie in Ringbereichen', 1921, 19],
 ];
 
-const PLACES = ['London', 'Paris', 'Cambridge', 'Edinburgh', 'Berlin', 'Vienna', 'Warsaw', 'Basel'];
+const PLACES = [
+  'London',
+  'Paris',
+  'Woolsthorpe-by-Colsterworth',
+  'Jedburgh',
+  'Erlangen',
+  'Brno',
+  'Warsaw',
+  'Basel',
+];
 
 const BORN_IN: [personIdx: number, placeIdx: number][] = [
   [0, 0],
@@ -115,7 +124,6 @@ const INFLUENCED: [fromIdx: number, toIdx: number][] = [
   [21, 17],
   [2, 13],
   [16, 15],
-  [19, 20],
 ];
 
 // Document -> Concept citations from the curated core.
